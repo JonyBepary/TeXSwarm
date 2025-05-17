@@ -1,100 +1,121 @@
-# TeXSwarm
+# TeXSwarm: Decentralized LaTeX Collaboration Platform
 
-![TeXSwarm Logo](https://via.placeholder.com/150?text=TeXSwarm)
+A decentralized peer-to-peer alternative to Overleaf for collaborative LaTeX editing, enabling seamless document collaboration without centralized servers.
 
-A decentralized peer-to-peer alternative to Overleaf for collaborative LaTeX editing. TeXSwarm enables multiple users to work on LaTeX documents simultaneously with real-time synchronization.
+![TeXSwarm Logo](https://github.com/JonyBepary/TeXSwarm/raw/main/docs/images/logo.png)
+
+## Overview
+
+TeXSwarm enables real-time collaborative editing of LaTeX documents in a fully decentralized manner. Multiple users can work on the same document simultaneously, with changes automatically synchronized across all participants. The platform leverages conflict-free replicated data types (CRDTs) to ensure that all users see a consistent document state regardless of network conditions.
 
 ## Features
 
-- **CRDT-based Collaborative Editing**: Uses diamond-types for conflict-free collaborative editing
-- **P2P Networking**: Built on libp2p for decentralized peer-to-peer communication
-- **Git Integration**: Seamless synchronization with Git repositories
-- **Modular Architecture**: Pluggable design allowing multiple frontends to connect
-- **API Layer**: Well-designed API and protocols for communication
-- **Real-time Collaboration**: Edit documents simultaneously with multiple users
-- **No Central Server**: Fully decentralized architecture eliminates single points of failure
-- **Versioning**: Complete document history with branch and merge support
+- **CRDT-based Collaborative Editing**: Uses diamond-types for conflict-free collaborative editing with automatic conflict resolution
+- **P2P Networking**: Built on libp2p for decentralized peer-to-peer communication without requiring central servers
+- **Git Integration**: Seamless synchronization with Git repositories for version control and backup
+- **Modular Architecture**: Pluggable design allowing multiple frontends to connect to the same backend
+- **API Layer**: Well-designed API and protocols for communication between components
+- **Real-time Collaboration**: Multiple users can edit the same document simultaneously with changes visible in real-time
+- **Offline Support**: Continue working without an internet connection and sync changes when connectivity is restored
+- **User Presence**: See who is currently editing a document and their cursor positions
+- **LaTeX Compilation**: Automatic compilation of LaTeX documents to preview changes
 
 ## Architecture
 
-The system consists of several core components:
+TeXSwarm is built with a modular architecture that separates concerns and allows for flexibility:
 
-- **CRDT Engine**: Manages document state and operations using diamond-types
-- **Network Engine**: Handles P2P discovery and communication via libp2p
-- **Git Manager**: Provides Git repository integration for external synchronization
-- **API Layer**: Exposes HTTP and WebSocket interfaces for frontends
+- **CRDT Engine**: The core of the system, managing document state and operations using diamond-types library
+  - Handles the Conflict-free Replicated Data Type operations
+  - Ensures eventual consistency across all peers
+  - Manages document branches and their synchronization
 
-### Component Interactions
+- **Network Engine**: Manages peer discovery and communication in a decentralized network
+  - Implements peer discovery via mDNS and Kademlia DHT
+  - Handles document subscription and message routing
+  - Ensures reliable message delivery even in challenging network conditions
+
+- **Git Manager**: Provides Git integration for version control and collaboration
+  - Syncs documents with Git repositories
+  - Handles conflict resolution between CRDT operations and Git changes
+  - Supports GitHub and other Git hosting services
+
+- **API Layer**: Exposes HTTP and WebSocket interfaces for client applications
+  - REST API for document management
+  - WebSocket API for real-time collaboration
+  - Comprehensive API documentation with examples
+
+The following diagram illustrates the architecture:
 
 ```
-┌─────────────┐     ┌─────────────┐
-│  API Layer  │◄───►│  Frontends  │
-└──────┬──────┘     └─────────────┘
-       │
-┌──────▼──────┐     ┌─────────────┐
-│ CRDT Engine │◄───►│    Git      │
-└──────┬──────┘     │   Manager   │
-       │            └─────────────┘
-┌──────▼──────┐     ┌─────────────┐
-│  Network    │◄───►│  Other      │
-│  Engine     │     │  Peers      │
-└─────────────┘     └─────────────┘
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│                  │     │                  │     │                  │
+│   Web Frontend   │     │  Mobile Frontend │     │ Desktop Frontend │
+│                  │     │                  │     │                  │
+└────────┬─────────┘     └────────┬─────────┘     └────────┬─────────┘
+         │                        │                        │
+         └────────────┬───────────┴────────────┬──────────┘
+                      │                        │
+               ┌──────▼─────────┐      ┌───────▼──────────┐
+               │                │      │                  │
+               │  HTTP API      │      │  WebSocket API   │
+               │                │      │                  │
+               └──────┬─────────┘      └───────┬──────────┘
+                      │                        │
+                      └────────────┬───────────┘
+                                   │
+         ┌────────────────────────┬┴─────────────────────────────┐
+         │                        │                              │
+┌────────▼─────────┐     ┌────────▼─────────┐          ┌─────────▼────────┐
+│                  │     │                  │          │                  │
+│   CRDT Engine    │◄────►   Network Engine │◄─────────►   Git Manager    │
+│                  │     │                  │          │                  │
+└──────────────────┘     └──────────────────┘          └──────────────────┘
 ```
 
 ## Document Synchronization
 
-The project uses a robust document synchronization mechanism based on the following components:
+TeXSwarm implements a robust document synchronization mechanism that ensures all users see a consistent document state regardless of network conditions. The synchronization is based on the following components:
 
 1. **CRDT Operations**: Document changes are encoded as CRDT operations to ensure eventual consistency
+   - Insert operations add text at a specific position
+   - Delete operations remove text from a range
+   - Replace operations combine delete and insert
+   - All operations include metadata like user ID and document ID
+
 2. **Document Subscription**: Peers subscribe to document topics to receive updates
+   - Topic-based publish/subscribe using libp2p gossipsub
+   - Automatic discovery of peers editing the same document
+   - Peers can join and leave documents dynamically
+
 3. **Operation Broadcasting**: Changes are broadcast to all subscribed peers
+   - Operations are encoded and broadcast to all peers in real-time
+   - Multiple delivery mechanisms ensure operation delivery
+   - Operations are applied to the local document state when received
+
 4. **Branch Synchronization**: Document branches are synchronized between peers
+   - Each peer maintains a branch of the document
+   - CRDT algorithms ensure branches converge to the same state
+   - Merge operations are handled automatically
 
 Recent improvements to the document synchronization include:
-- Fixed peer ID handling in the NetworkEngine
-- Enhanced document subscription mechanism
-- Improved operation broadcasting to ensure delivery
-- Added document synchronization request capabilities
+- Fixed peer ID handling in the NetworkEngine to ensure proper peer identification
+- Enhanced document subscription mechanism with better error handling and recovery
+- Improved operation broadcasting to ensure delivery even in challenging network conditions
+- Added document synchronization request capabilities to recover from missed operations
 
-See [SYNCHRONIZATION_SOLUTION.md](SYNCHRONIZATION_SOLUTION.md) for detailed information on the document synchronization solution.
-
-## Technical Implementation
-
-### CRDT Implementation
-
-TeXSwarm uses the diamond-types CRDT library for handling concurrent document edits. Diamond-types offers:
-
-- Efficient list operations for text documents
-- Custom data type support
-- Compact binary encoding
-- Optimized merge operations
-- Causality tracking for conflict resolution
-
-### Network Protocol
-
-The network protocol includes these key components:
-
-- Document discovery and subscription
-- Operation broadcasting with topic-based PubSub
-- Direct peer-to-peer synchronization requests
-- Mesh network topology for resilience
-
-### Document Operations
-
-Three main operation types are supported:
-- **Insert**: Add text at a specific position
-- **Delete**: Remove text from a range
-- **Replace**: Combined delete and insert operations
+See [SYNCHRONIZATION_SOLUTION.md](SYNCHRONIZATION_SOLUTION.md) for detailed information on the document synchronization solution and how we addressed specific synchronization challenges.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Rust 2024 Edition or later
-- Git
-- Node.js 18+ (for web frontend)
+- Rust 2024 Edition or later (rustc 1.74+ recommended)
+- Git 2.30+
+- For the web frontend: Node.js 18+ and npm 9+
 
-### Building the Project
+### Installation
+
+#### From Source
 
 ```bash
 # Clone the repository
@@ -108,27 +129,43 @@ cargo build --release
 cargo run --release --bin server
 ```
 
-### Development Setup
+#### Using Cargo
 
 ```bash
-# Run in development mode
-cargo run --bin server
+# Install from crates.io
+cargo install texswarm
 
-# Run the web frontend
-cd web
-npm install
-npm start
-
-# Run tests
-cargo test
+# Run the server
+texswarm-server
 ```
+
+#### Web Frontend
+
+```bash
+# Navigate to the web directory
+cd TeXSwarm/web
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm start
+```
+
+### Connecting Clients
+
+Once the server is running, you can connect to it using any of the available clients:
+
+- Web client: Navigate to `http://localhost:8080` in your browser
+- API client: Connect to `http://localhost:8080/api`
+- WebSocket client: Connect to `ws://localhost:8081`
 
 ### Configuration
 
-The application uses a configuration file located at `~/.config/texswarm/config.json`.
-If this file doesn't exist, a default configuration will be created automatically.
+TeXSwarm uses a configuration file located at `~/.config/texswarm/config.json`.
+If this file doesn't exist, a default configuration will be created automatically on first run.
 
-Example configuration:
+#### Configuration File Structure
 
 ```json
 {
@@ -161,78 +198,215 @@ Example configuration:
 }
 ```
 
+#### Configuration Options
+
+**Server Configuration**
+- `api_host`: Host address for the HTTP API server
+- `api_port`: Port for the HTTP API server
+- `ws_host`: Host address for the WebSocket server
+- `ws_port`: Port for the WebSocket server
+
+**Network Configuration**
+- `peer_id_seed`: Optional seed for generating a consistent peer ID
+- `bootstrap_nodes`: List of nodes to connect to on startup
+- `listen_addresses`: List of addresses to listen on for incoming connections
+- `external_addresses`: List of external addresses to advertise
+- `enable_mdns`: Enable mDNS peer discovery (local network)
+- `enable_kad`: Enable Kademlia DHT for peer discovery
+
+**Git Configuration**
+- `repositories_path`: Path where Git repositories will be stored
+- `github_token`: GitHub access token for repository access
+- `github_username`: GitHub username for commits
+- `github_email`: GitHub email for commits
+
+**Storage Configuration**
+- `documents_path`: Path where documents will be stored
+- `max_document_size_mb`: Maximum document size in megabytes
+- `enable_autosave`: Enable automatic saving of documents
+- `autosave_interval_seconds`: Interval between autosaves
+
 ## API Documentation
 
 ### HTTP API
 
-The HTTP API is available at `http://{api_host}:{api_port}`.
+The HTTP API is available at `http://{api_host}:{api_port}` and follows RESTful conventions. All responses are in JSON format.
 
-#### Endpoints
+#### Authentication
 
-- `POST /documents`: Create a new document
-- `GET /documents`: List all documents
-- `GET /documents/{id}`: Get document metadata
-- `GET /documents/{id}/content`: Get document content
-- `POST /documents/{id}/insert`: Insert text into a document
-- `POST /documents/{id}/delete`: Delete text from a document
-- `POST /documents/{id}/replace`: Replace text in a document
-- `POST /documents/{id}/sync`: Synchronize with Git repository
-- `GET /peers`: List connected peers
-- `GET /status`: Get node status
+Most endpoints require authentication using a JWT token. To authenticate, include the token in the `Authorization` header:
+
+```
+Authorization: Bearer <your-token>
+```
+
+#### Document Endpoints
+
+| Endpoint | Method | Description | Request Body | Response |
+|----------|--------|-------------|-------------|----------|
+| `/documents` | GET | List all documents | - | Array of document metadata |
+| `/documents` | POST | Create a new document | `{ "title": "string", "content": "string" }` | Document metadata |
+| `/documents/{id}` | GET | Get document metadata | - | Document metadata |
+| `/documents/{id}/content` | GET | Get document content | - | Document content |
+| `/documents/{id}/content` | PUT | Update document content | Raw document content | Success status |
+| `/documents/{id}/operations` | POST | Apply operation to document | Operation object | Success status |
+| `/documents/{id}/sync` | POST | Synchronize with Git repository | - | Sync status |
+
+#### User Endpoints
+
+| Endpoint | Method | Description | Request Body | Response |
+|----------|--------|-------------|-------------|----------|
+| `/users/register` | POST | Register a new user | User registration details | User metadata with token |
+| `/users/login` | POST | Login | Login credentials | Authentication token |
+| `/users/profile` | GET | Get user profile | - | User profile data |
+| `/users/profile` | PUT | Update user profile | Profile update details | Updated profile |
+
+For detailed information about request and response formats, see the [API Protocol Documentation](docs/api_protocol.md).
 
 ### WebSocket API
 
-The WebSocket API is available at `ws://{ws_host}:{ws_port}`.
+The WebSocket API is available at `ws://{ws_host}:{ws_port}` and enables real-time collaboration and notifications.
 
-Messages use the protocol defined in `src/api/protocol.rs`. The WebSocket API supports real-time collaboration with the following message types:
+#### Connection
 
-- Document subscription
-- Operation broadcasting
-- Presence updates
-- Document synchronization
-- Error handling
+To connect to the WebSocket API, establish a WebSocket connection to the server URL. Authentication is performed by sending an authentication message immediately after connection:
 
-## Known Issues and Solutions
+```json
+{
+  "type": "authenticate",
+  "token": "your-jwt-token"
+}
+```
 
-### Document Synchronization Issues
+#### Message Types
 
-Our recent testing has identified and fixed several document synchronization issues:
+Messages sent and received through the WebSocket connection follow a common format:
 
-1. **Missing Method Implementation**: Fixed the `get_local_peer_id()` method in NetworkEngine.
-2. **Document Branch Propagation**: Added explicit document branch sharing between peers.
-3. **Subscription Handling**: Enhanced document subscription to include content synchronization.
-4. **Network Mock Limitations**: Created better workarounds for the mock network implementation.
+```json
+{
+  "type": "string",
+  "data": {
+    // Message-specific data
+  }
+}
+```
 
-For a complete description of the issues and fixes, see the [DOCUMENT_SYNC_ISSUES.md](DOCUMENT_SYNC_ISSUES.md) file.
+Common message types include:
 
-## Project Roadmap
+| Type | Direction | Description | Data Structure |
+|------|-----------|-------------|----------------|
+| `operation` | Client → Server | Document operation | CRDT operation details |
+| `presence` | Client → Server | User presence update | Cursor position, selection |
+| `document_update` | Server → Client | Document updated | Updated document content |
+| `presence_update` | Server → Client | User presence changed | User ID, cursor position |
+| `error` | Server → Client | Error occurred | Error code and message |
 
-- [ ] Complete P2P network implementation with libp2p
-- [ ] Enhanced LaTeX-specific features (syntax checking, autocompletion)
-- [ ] Desktop client application
-- [ ] Mobile clients
-- [ ] Encrypted document support
-- [ ] Collaborative LaTeX compilation
-- [ ] Real-time preview and commenting
+For detailed information about WebSocket message formats, see [`src/api/protocol.rs`](src/api/protocol.rs).
 
-## Contributing
+## Development
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### Project Structure
+
+```
+TeXSwarm/
+├── src/
+│   ├── api/             # API layer implementation
+│   │   ├── http.rs      # HTTP API handlers
+│   │   ├── protocol.rs  # API protocol definitions
+│   │   ├── server.rs    # Server implementation
+│   │   └── websocket.rs # WebSocket API handlers
+│   ├── bin/             # Executable binaries
+│   │   ├── server.rs    # Main server binary
+│   │   └── ...          # Test and utility binaries
+│   ├── crdt/            # CRDT implementation
+│   │   ├── document.rs  # Document model
+│   │   ├── engine.rs    # CRDT engine
+│   │   └── operations.rs # CRDT operations
+│   ├── git/             # Git integration
+│   │   ├── manager.rs   # Git manager
+│   │   └── repository.rs # Git repository
+│   ├── network/         # P2P networking
+│   │   ├── engine.rs    # Network engine
+│   │   ├── peer.rs      # Peer management
+│   │   └── protocol.rs  # Network protocol
+│   ├── utils/           # Utility functions
+│   │   ├── config.rs    # Configuration
+│   │   └── errors.rs    # Error handling
+│   └── lib.rs           # Library entry point
+├── web/                 # Web frontend
+│   ├── src/             # Frontend source code
+│   ├── public/          # Static assets
+│   └── package.json     # Frontend dependencies
+├── docs/                # Documentation
+├── tests/               # Integration tests
+└── README.md            # This file
+```
+
+### Building and Testing
+
+#### Building
+
+```bash
+# Debug build
+cargo build
+
+# Release build
+cargo build --release
+```
+
+#### Running Tests
+
+```bash
+# Run all tests
+cargo test
+
+# Run specific test
+cargo test -- test_name
+
+# Run tests with logging
+RUST_LOG=debug cargo test
+```
+
+### Contributing
+
+Contributions to TeXSwarm are welcome! Here's how to get started:
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a new branch for your feature
+3. Add your changes
+4. Run tests to ensure everything works
+5. Submit a pull request
 
-## Testing
+Please follow the [Rust Code Style Guidelines](https://rustc-dev-guide.rust-lang.org/conventions.html) for your code.
 
-We have several test scripts to verify different aspects of the system:
+## Troubleshooting
 
-- `cargo run --bin comprehensive_test`: Tests all components together
-- `cargo run --bin network_test`: Tests the network layer
-- `cargo run --bin document_sync_test`: Specifically tests document synchronization
-- `cargo run --bin advanced_sync_test`: Advanced synchronization testing
+### Common Issues
+
+#### Document Synchronization Issues
+
+If you're experiencing document synchronization issues, check the following:
+
+1. Ensure all instances are connected to the network
+2. Verify that the document exists in all instances
+3. Check that document subscription is working correctly
+4. See [DOCUMENT_SYNC_ISSUES.md](DOCUMENT_SYNC_ISSUES.md) for detailed diagnostics
+
+#### Network Connectivity Issues
+
+If peers cannot discover each other:
+
+1. Make sure mDNS is enabled in the configuration
+2. Check if the bootstrap nodes are reachable
+3. Verify that your network allows UDP traffic
+
+#### Git Integration Issues
+
+If Git synchronization is not working:
+
+1. Check the Git credentials in the configuration
+2. Ensure the repository exists and is accessible
+3. Verify that the GitHub token has the correct permissions
 
 ## License
 
@@ -240,6 +414,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- The [diamond-types](https://github.com/josephg/diamond-types) library for CRDT implementation
-- [libp2p](https://github.com/libp2p/rust-libp2p) for P2P networking capabilities
-- The Rust community for creating an amazing ecosystem
+- [diamond-types](https://github.com/josephg/diamond-types) for CRDT implementation
+- [libp2p](https://github.com/libp2p/rust-libp2p) for peer-to-peer networking
+- [LaTeX](https://www.latex-project.org/) for document typesetting
+- Me who have helped with development
+<!-- - All contributors who have helped with development -->

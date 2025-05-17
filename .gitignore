@@ -1,0 +1,27 @@
+# Generated files
+/target/
+**/*.rs.bk
+
+# Local development and backup files
+*.swp
+*.swo
+*.bak
+*.orig
+*.tmp
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE and editor directories
+.idea/
+.vscode/
+*.iml
+
+# Temporary directories
+/tmp/
+
+# Log files
+*.log

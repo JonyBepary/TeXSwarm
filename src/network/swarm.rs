@@ -1,0 +1,371 @@
+// filepath: /home/jony/rust-pract/p2p-latex-collab/src/network/swarm.rs
+use anyhow::Result;
+use futures::StreamExt;
+use libp2p::{
+    gossipsub::{
+        Behaviour as Gossipsub, Config as GossipsubConfig, Event as GossipsubEvent,
+        MessageAuthenticity, IdentTopic,
+    },
+    identity, noise,
+    request_response::{self, Behaviour as RequestResponseBehaviour, Event as RequestResponseEvent, ProtocolSupport},
+    swarm::{SwarmEvent, NetworkBehaviour},
+    tcp, Multiaddr, PeerId, Swarm, Transport,
+};
+use std::collections::HashSet;
+use std::time::Duration;
+use std::sync::Arc;
+use tokio::sync::{mpsc, RwLock};
+use uuid::Uuid;
+
+use super::peer::{PeerRegistry};
+use super::protocol::{CollabCodec, CollabProtocol, CollabRequest, CollabResponse, NetworkMessage};
+use crate::utils::config::NetworkConfig;
+use crate::utils::errors::AppError;
+
+/// Topics for different document events
+pub enum DocumentTopic {
+    /// Topic for document operations
+    Operations(Uuid),
+    /// Topic for document presence updates
+    Presence(Uuid),
+    /// Topic for document metadata updates
+    Metadata(Uuid),
+}
+
+impl DocumentTopic {
+    /// Convert to a gossipsub Topic
+    pub fn to_topic(&self) -> IdentTopic {
+        match self {
+            DocumentTopic::Operations(id) => IdentTopic::new(format!("doc-ops/{}", id)),
+            DocumentTopic::Presence(id) => IdentTopic::new(format!("doc-presence/{}", id)),
+            DocumentTopic::Metadata(id) => IdentTopic::new(format!("doc-meta/{}", id)),
+        }
+    }
+
+    /// Convert to a topic string
+    pub fn to_topic_string(&self) -> String {
+        match self {
+            DocumentTopic::Operations(id) => format!("doc-ops/{}", id),
+            DocumentTopic::Presence(id) => format!("doc-presence/{}", id),
+            DocumentTopic::Metadata(id) => format!("doc-meta/{}", id),
+        }
+    }
+}
+
+/// Network events that can be sent to the application
+#[derive(Debug)]
+pub enum NetworkEvent {
+    /// New peer discovered
+    PeerDiscovered(PeerId),
+    /// Peer connection established
+    PeerConnected(PeerId),
+    /// Peer disconnected
+    PeerDisconnected(PeerId),
+    /// Message received on a topic
+    MessageReceived {
+        source: PeerId,
+        topic: String,
+        data: Vec<u8>,
+    },
+    /// Request received from a peer
+    RequestReceived {
+        request_id: request_response::RequestId,
+        source: PeerId,
+        request: CollabRequest,
+        channel: request_response::ResponseChannel<CollabResponse>,
+    },
+    /// Response received from a peer
+    ResponseReceived {
+        request_id: String,
+        source: PeerId,
+        response: CollabResponse,
+    },
+}
+
+/// Network service for P2P communication
+pub struct NetworkService {
+    /// libp2p Swarm
+    swarm: Arc<tokio::sync::Mutex<Swarm<NetworkBehavior>>>,
+    /// Local peer ID
+    local_peer_id: PeerId,
+    /// Registry of known peers
+    peer_registry: Arc<RwLock<PeerRegistry>>,
+    /// Subscribed topics
+    subscribed_topics: Arc<tokio::sync::Mutex<HashSet<String>>>,
+    /// Sender for network events
+    event_sender: mpsc::Sender<NetworkEvent>,
+}
+
+/// Combined network behavior
+#[derive(NetworkBehaviour)]
+#[behaviour(out_event = "NetworkBehaviorEvent")]
+pub struct NetworkBehavior {
+    /// Request-response protocol
+    request_response: RequestResponseBehaviour<CollabCodec>,
+    /// Gossipsub for pub/sub messaging
+    gossipsub: Gossipsub,
+}
+
+/// Events from the network behavior
+#[derive(Debug)]
+pub enum NetworkBehaviorEvent {
+    /// Request-response events
+    RequestResponse(RequestResponseEvent<CollabRequest, CollabResponse>),
+    /// Gossipsub events
+    Gossipsub(GossipsubEvent),
+}
+
+impl From<RequestResponseEvent<CollabRequest, CollabResponse>> for NetworkBehaviorEvent {
+    fn from(event: RequestResponseEvent<CollabRequest, CollabResponse>) -> Self {
+        NetworkBehaviorEvent::RequestResponse(event)
+    }
+}
+
+impl From<GossipsubEvent> for NetworkBehaviorEvent {
+    fn from(event: GossipsubEvent) -> Self {
+        NetworkBehaviorEvent::Gossipsub(event)
+    }
+}
+
+impl NetworkService {
+    /// Create a new network service
+    pub async fn new(config: NetworkConfig) -> Result<Self> {
+        // Create a random keypair or use the provided seed
+        let local_key = match &config.peer_id_seed {
+            Some(seed) => {
+                let mut bytes = seed.as_bytes().to_vec();
+                // Ensure bytes length matches expected format
+                bytes.resize(32, 0);
+                identity::Keypair::ed25519_from_bytes(bytes)
+                    .map_err(|_| anyhow::anyhow!(AppError::NetworkError("Invalid peer ID seed".to_string())))?
+            }
+            None => identity::Keypair::generate_ed25519(),
+        };
+
+        let local_peer_id = PeerId::from(local_key.public());
+        println!("Local peer ID: {}", local_peer_id);
+
+        // Set up the transport with TCP and Noise encryption
+        let transport = tcp::tokio::Transport::default()
+            .upgrade(libp2p::core::upgrade::Version::V1Lazy)
+            .authenticate(noise::Config::new(&local_key)?)
+            .multiplex(libp2p::yamux::Config::default())
+            .boxed();
+
+        // Set up the request-response protocol
+        let request_protocol_config = request_response::Config::default();
+        let request_response = RequestResponseBehaviour::new(
+            CollabCodec,
+            [(CollabProtocol, ProtocolSupport::Full)],
+            request_protocol_config,
+        );
+
+        // Set up gossipsub
+        let gossipsub_config = GossipsubConfig::default();
+        let gossipsub = Gossipsub::new(
+            MessageAuthenticity::Signed(local_key),
+            gossipsub_config,
+        )
+        .map_err(|err| anyhow::anyhow!(AppError::NetworkError(err.to_string())))?;
+
+        // Create the combined behavior
+        let behavior = NetworkBehavior {
+            request_response,
+            gossipsub,
+        };
+
+        // Create the swarm with the combined behavior
+        let mut swarm = libp2p::swarm::SwarmBuilder::with_tokio_executor(
+            transport,
+            behavior,
+            local_peer_id,
+        ).build();
+
+        // Listen on the specified addresses
+        for addr_str in &config.listen_addresses {
+            let addr: Multiaddr = addr_str
+                .parse()
+                .map_err(|e| anyhow::anyhow!(AppError::NetworkError(format!("Invalid listen address: {}", e))))?;
+
+            swarm.listen_on(addr.clone())
+                .map_err(|e| anyhow::anyhow!(AppError::NetworkError(format!("Failed to listen on {}: {}", addr, e))))?;
+        }
+
+        // Create event channels
+        let (event_sender, _) = mpsc::channel(100);
+
+        // Create the peer registry
+        let peer_registry = Arc::new(RwLock::new(PeerRegistry::new(Duration::from_secs(300))));
+
+        Ok(Self {
+            swarm: Arc::new(tokio::sync::Mutex::new(swarm)),
+            local_peer_id,
+            peer_registry,
+            subscribed_topics: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
+            event_sender,
+        })
+    }
+
+    /// Get the local peer ID
+    pub fn local_peer_id(&self) -> PeerId {
+        self.local_peer_id
+    }
+
+    /// Get the event receiver
+    pub fn take_event_receiver(&mut self) -> mpsc::Receiver<NetworkEvent> {
+        // Create a new channel and clone the sender
+        let (tx, rx) = mpsc::channel(100);
+        self.event_sender = tx;
+        rx
+    }
+
+    /// Connect to a peer
+    pub async fn connect_to_peer(&mut self, addr: Multiaddr) -> Result<()> {
+        let mut swarm = self.swarm.lock().await;
+        swarm.dial(addr.clone())
+            .map_err(|e| anyhow::anyhow!(AppError::NetworkError(format!("Failed to dial {}: {}", addr, e))))?;
+        Ok(())
+    }
+
+    /// Subscribe to a document topic
+    pub async fn subscribe_to_topic(&mut self, topic_str: String) -> Result<()> {
+        let mut topics = self.subscribed_topics.lock().await;
+        if !topics.contains(&topic_str) {
+            let topic = IdentTopic::new(topic_str.clone());
+            let mut swarm = self.swarm.lock().await;
+            swarm.behaviour_mut().gossipsub.subscribe(&topic)
+                .map_err(|e| anyhow::anyhow!(AppError::NetworkError(format!("Failed to subscribe to topic {}: {}", topic_str, e))))?;
+            topics.insert(topic_str);
+        }
+        Ok(())
+    }
+
+    /// Unsubscribe from a document topic
+    pub async fn unsubscribe_from_topic(&mut self, topic_str: String) -> Result<()> {
+        let mut topics = self.subscribed_topics.lock().await;
+        if topics.contains(&topic_str) {
+            let topic = IdentTopic::new(topic_str.clone());
+            let mut swarm = self.swarm.lock().await;
+            if let Err(e) = swarm.behaviour_mut().gossipsub.unsubscribe(&topic) {
+                return Err(anyhow::anyhow!(AppError::NetworkError(format!("Failed to unsubscribe from topic {}: {}", topic_str, e))));
+            }
+            topics.remove(&topic_str);
+        }
+        Ok(())
+    }
+
+    /// Publish a message to a topic
+    pub async fn publish_to_topic(&mut self, topic_str: String, data: Vec<u8>) -> Result<()> {
+        let topic = IdentTopic::new(topic_str);
+        let mut swarm = self.swarm.lock().await;
+        swarm.behaviour_mut().gossipsub.publish(topic, data)
+            .map_err(|e| anyhow::anyhow!(AppError::NetworkError(format!("Failed to publish to topic: {}", e))))?;
+        Ok(())
+    }
+
+    /// Send a request to a peer
+    pub async fn send_request(&mut self, peer_id: PeerId, request: NetworkMessage) -> Result<()> {
+        let mut swarm = self.swarm.lock().await;
+        swarm.behaviour_mut().request_response.send_request(&peer_id, CollabRequest(request));
+        Ok(())
+    }
+
+    /// Send a response to a request
+    pub async fn send_response(
+        &mut self,
+        channel: request_response::ResponseChannel<CollabResponse>,
+        response: NetworkMessage
+    ) -> Result<()> {
+        let mut swarm = self.swarm.lock().await;
+        swarm.behaviour_mut().request_response.send_response(channel, CollabResponse(response))
+            .map_err(|e| anyhow::anyhow!(AppError::NetworkError(format!("Failed to send response: {:?}", e))))?;
+        Ok(())
+    }
+
+    /// Run the network service
+    pub async fn run(self) -> Result<()> {
+        let swarm = self.swarm;
+        let event_sender = self.event_sender;
+        let peer_registry = self.peer_registry;
+
+        // Spawn a task to handle swarm events
+        tokio::spawn(async move {
+            let mut swarm = swarm.lock().await;
+
+            while let Some(event) = swarm.next().await {
+                match event {
+                    SwarmEvent::Behaviour(NetworkBehaviorEvent::Gossipsub(gossipsub_event)) => {
+                        if let GossipsubEvent::Message {
+                            propagation_source,
+                            message_id: _,
+                            message,
+                        } = gossipsub_event {
+                            let _ = event_sender.send(NetworkEvent::MessageReceived {
+                                source: propagation_source,
+                                topic: message.topic.to_string(),
+                                data: message.data,
+                            }).await;
+                        }
+                    },
+                    SwarmEvent::Behaviour(NetworkBehaviorEvent::RequestResponse(request_response_event)) => {
+                        match request_response_event {
+                            RequestResponseEvent::Message { peer, message } => {
+                                match message {
+                                    request_response::Message::Request {
+                                        request_id,
+                                        request,
+                                        channel
+                                    } => {
+                                        let _ = event_sender.send(NetworkEvent::RequestReceived {
+                                            request_id,
+                                            source: peer,
+                                            request,
+                                            channel,
+                                        }).await;
+                                    },
+                                    request_response::Message::Response {
+                                        request_id,
+                                        response
+                                    } => {
+                                        let _ = event_sender.send(NetworkEvent::ResponseReceived {
+                                            request_id: request_id.to_string(),
+                                            source: peer,
+                                            response,
+                                        }).await;
+                                    },
+                                }
+                            },
+                            _ => {},
+                        }
+                    },
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Listening on {}", address);
+                    },
+                    SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                        let mut registry = peer_registry.write().await;
+                        registry.add_peer(peer_id);
+                        let _ = event_sender.send(NetworkEvent::PeerConnected(peer_id)).await;
+                    },
+                    SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                        let _ = event_sender.send(NetworkEvent::PeerDisconnected(peer_id)).await;
+                    },
+                    _ => {},
+                }
+            }
+        });
+
+        Ok(())
+    }
+}
+
+impl Clone for NetworkService {
+    fn clone(&self) -> Self {
+        Self {
+            swarm: Arc::clone(&self.swarm),
+            local_peer_id: self.local_peer_id,
+            peer_registry: Arc::clone(&self.peer_registry),
+            subscribed_topics: Arc::clone(&self.subscribed_topics),
+            event_sender: self.event_sender.clone(),
+        }
+    }
+}

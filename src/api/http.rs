@@ -71,6 +71,17 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserResponse {
+    pub id: String,
+    pub name: String,
+}
+
 /// The HTTP API server
 pub struct HttpApi {
     crdt_engine: Arc<RwLock<CrdtEngine>>,
@@ -123,11 +134,18 @@ impl HttpApi {
             .and(warp::path("ping"))
             .and(warp::get())
             .map(|| {
+                tracing::info!("Received ping request");
                 warp::reply::json(&PingResponse {
                     status: "ok".to_string(),
                     server_version: env!("CARGO_PKG_VERSION").to_string(),
                 })
             });
+
+        let user_registration = warp::path("api")
+            .and(warp::path("users"))
+            .and(warp::post())
+            .and(warp::body::json())
+            .and_then(Self::handle_user_registration);
 
         let create_document = warp::path("documents")
             .and(warp::post())
@@ -186,6 +204,8 @@ impl HttpApi {
                 resp
             });
 
+
+
         // Combine all routes
         let api = create_document
             .or(list_documents)
@@ -193,6 +213,7 @@ impl HttpApi {
             .or(insert_operation)
             .or(delete_operation)
             .or(git_sync)
+            .or(user_registration)
             .or(ping);
 
         // Add CORS to the combined API
@@ -207,6 +228,26 @@ impl HttpApi {
             Arc::clone(&self.network_engine),
             Arc::clone(&self.git_manager)
         )
+    }
+
+    async fn handle_user_registration(
+        req: UserRequest,
+    ) -> Result<impl Reply, Infallible> {
+        tracing::info!("User registration request for: {}", req.name);
+
+        // Generate a user ID (in a real system this would be stored)
+        let user_id = Uuid::new_v4().to_string();
+
+        // Create the response
+        let response = UserResponse {
+            id: user_id,
+            name: req.name,
+        };
+
+        tracing::info!("User registration successful: {:?}", response);
+
+        // Return the user info
+        Ok(warp::reply::json(&response))
     }
 
     async fn handle_create_document(
@@ -405,6 +446,8 @@ impl HttpApi {
 
         Ok(())
     }
+
+    // This was a duplicate function - removed to fix compilation errors
 }
 
 // Helper functions to extract dependencies

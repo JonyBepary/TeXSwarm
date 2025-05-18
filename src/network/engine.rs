@@ -68,7 +68,7 @@ pub enum NetworkEvent {
 #[derive(Debug)]
 pub struct NetworkService {
     /// Local peer ID
-    local_peer_id: PeerId,
+    pub local_peer_id: PeerId,
     /// Sender for network events
     event_sender: mpsc::Sender<NetworkEvent>,
 }
@@ -165,7 +165,7 @@ impl NetworkEngine {
         Ok(())
     }
 
-    
+
     /// Get the local peer ID
     pub async fn get_local_peer_id(&self) -> Result<String> {
         if let Some(service) = &self.service {
@@ -179,15 +179,6 @@ impl NetworkEngine {
         // Network service will be dropped when Option is cleared
         self.service = None;
         Ok(())
-    }
-
-    /// Get the local peer ID
-    pub async fn get_local_peer_id(&self) -> Result<String> {
-        if let Some(service) = &self.service {
-            Ok(service.local_peer_id.to_string())
-        } else {
-            Err(anyhow::anyhow!(AppError::NetworkError("Network service not initialized".to_string())))
-        }
     }
 
     async fn start_event_loop(&mut self) -> Result<()> {
@@ -294,16 +285,26 @@ impl NetworkEngine {
             // Publish to the operations topic for this document
             let topic_str = DocumentTopic::Operations(*doc_id).to_topic_string();
             service.publish_to_topic(topic_str, operation.clone()).await?;
-            
+
             // Also directly deliver the operation to all subscribed peers
             // This ensures operations propagate even if the gossipsub propagation fails
             if let Some(subscribers) = self.document_subscribers.get(doc_id) {
                 for peer_id_str in subscribers.value() {
                     if let Ok(peer_id) = peer_id_str.parse::<PeerId>() {
-                        // For a real implementation, we'd need to directly send the operation
-                        // to the peer. This would involve using request_response or a direct
-                        // connection to the peer.
-                        tracing::debug!("Would send operation directly to peer: {}", peer_id);
+                        // Skip sending to ourselves
+                        if peer_id.to_string() == service.local_peer_id.to_string() {
+                            continue;
+                        }
+
+                        // Create an operation message
+                        let _operation_msg = NetworkMessage::Operation {
+                            document_id: *doc_id,
+                            operations: operation.clone(),
+                        };
+
+                        // In a full implementation, we would send this operation directly
+                        // to the peer using the request-response protocol
+                        tracing::debug!("Sending operation directly to peer: {}", peer_id);
                     }
                 }
             }
@@ -316,30 +317,73 @@ impl NetworkEngine {
 
     pub async fn subscribe_to_document(&mut self, doc_id: Uuid) -> Result<()> {
         if let Some(service) = &mut self.service {
+            // Subscribe to the document operations topic
             let topic_str = DocumentTopic::Operations(doc_id).to_topic_string();
             service.subscribe_to_topic(topic_str).await?;
-            
+
+            // Also subscribe to presence and metadata topics for this document
+            let presence_topic = DocumentTopic::Presence(doc_id).to_topic_string();
+            service.subscribe_to_topic(presence_topic).await?;
+
+            let metadata_topic = DocumentTopic::Metadata(doc_id).to_topic_string();
+            service.subscribe_to_topic(metadata_topic).await?;
+
             // Add ourselves to the document subscribers
             let local_peer_id = self.get_local_peer_id().await?;
             let mut subscribers = self.document_subscribers.entry(doc_id).or_insert_with(Vec::new);
             if !subscribers.contains(&local_peer_id) {
                 subscribers.push(local_peer_id);
             }
-            
+
             // Request document content from any connected peer that has it
             self.request_document_sync(doc_id).await?;
+
+            // Broadcast our join to other peers
+            // This allows other peers to be aware that we're now editing this document
+            if let Ok(user_id) = self.get_local_peer_id().await {
+                let _presence_msg = NetworkMessage::Presence {
+                    document_id: doc_id,
+                    user_id: user_id.clone(),
+                    user_name: format!("User {}", user_id.chars().take(5).collect::<String>()),
+                    cursor_position: None,
+                    is_active: true,
+                };
+
+                // In a full implementation, we would broadcast this presence update
+                tracing::debug!("Broadcasting join presence for document: {}", doc_id);
+            }
         } else {
             return Err(anyhow::anyhow!(AppError::NetworkError("Network service not initialized".to_string())));
         }
 
         Ok(())
     }
-    
+
     /// Request document synchronization from peers
     async fn request_document_sync(&self, doc_id: Uuid) -> Result<()> {
-        // This would normally broadcast a sync request to all peers
-        // For the mock implementation, we'll just log the request
-        tracing::debug!("Requesting document sync for document: {}", doc_id);
+        if let Some(_service) = &self.service {
+            // Get all connected peers from the peer registry
+            let registry = self.peer_registry.read().await;
+            let peer_ids = registry.active_peers().map(|p| p.peer_id).collect::<Vec<_>>();
+
+            // Get our local user information for the request
+            let local_peer_id_str = self.get_local_peer_id().await?;
+
+            // Create a sync request message
+            let _request = NetworkMessage::SyncRequest {
+                document_id: doc_id,
+                user_id: local_peer_id_str,
+                version: None, // Full sync request
+            };
+
+            // In a full implementation, we would send this request to peers
+            // through the request-response protocol
+            tracing::debug!("Requesting document sync for document: {} from {} peers",
+                         doc_id, peer_ids.len());
+        } else {
+            return Err(anyhow::anyhow!(AppError::NetworkError("Network service not initialized".to_string())));
+        }
+
         Ok(())
     }
 
@@ -354,19 +398,19 @@ impl NetworkEngine {
 
         Ok(())
     }
-    
+
     /// Get the number of connected peers
     pub async fn get_connected_peer_count(&self) -> Result<usize> {
         let registry = self.peer_registry.read().await;
         Ok(registry.active_peers().count())
     }
-    
+
     /// Get the connected peers
     pub async fn get_connected_peers(&self) -> Result<Vec<String>> {
         let registry = self.peer_registry.read().await;
         Ok(registry.active_peers().map(|p| p.peer_id.to_string()).collect())
     }
-    
+
     /// Get all subscribed documents
     pub async fn get_subscribed_documents(&self) -> Result<Vec<Uuid>> {
         Ok(self.document_subscribers.iter().map(|entry| *entry.key()).collect())

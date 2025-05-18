@@ -53,6 +53,8 @@ impl WebSocketServer {
         let socket_addr: std::net::SocketAddr = addr.parse()
             .map_err(|e| AppError::ApiError(format!("Invalid WebSocket address: {}", e)))?;
 
+        tracing::info!("WebSocket binding to socket address: {}", socket_addr);
+
         // Create a clone of relevant resources for the handler closure
         let server_ref = self.clone();
 

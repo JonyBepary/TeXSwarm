@@ -58,7 +58,7 @@ impl WebSocketServer {
         // Create a clone of relevant resources for the handler closure
         let server_ref = self.clone();
 
-        // Create the WebSocket upgrader
+        // Create the WebSocket upgrader with CORS support
         let make_service = warp::serve(
             warp::path("ws")
                 .and(warp::ws())
@@ -66,6 +66,11 @@ impl WebSocketServer {
                 .map(|ws: warp::ws::Ws, server: WebSocketServer| {
                     ws.on_upgrade(move |websocket| handle_websocket_connection(websocket, server))
                 })
+                // Add CORS support for WebSocket handshake
+                .with(warp::cors()
+                    .allow_any_origin()
+                    .allow_headers(vec!["content-type", "authorization"])
+                    .allow_methods(vec!["GET", "POST", "OPTIONS"]))
         );
 
         // Start the server in a background task
@@ -404,19 +409,23 @@ async fn handle_websocket_connection(websocket: warp::ws::WebSocket, server: Web
                 if message.is_text() {
                     let text = message.to_str().unwrap_or_default();
                 // Try to parse the message as an ApiMessage
+                tracing::info!("Received WebSocket message: {}", text);
                 match serde_json::from_str::<ApiMessage>(text) {
                         Ok(api_message) => {
+                            tracing::info!("Parsed WebSocket message: {:?}", api_message);
                             // Handle the message
                             match server.handle_message(&session_id, api_message).await {
                                 Ok(Some(response)) => {
                                     // Send response if there is one
                                     let response_text = serde_json::to_string(&response).unwrap();
+                                    tracing::info!("Sending WebSocket response: {}", response_text);
                                     if let Ok(sender) = server.get_sender(&session_id).await {
                                         let _ = sender.send(WarpMessage::text(response_text)).await;
                                     }
                                 },
                                 Ok(None) => {
                                     // No response needed
+                                    tracing::info!("No response needed for this message");
                                 },
                                 Err(e) => {
                                     // Send error response
@@ -424,6 +433,7 @@ async fn handle_websocket_connection(websocket: warp::ws::WebSocket, server: Web
                                         code: "error".to_string(),
                                         message: format!("Error: {}", e),
                                     }).unwrap();
+                                    tracing::error!("WebSocket error: {}", e);
 
                                     if let Ok(sender) = server.get_sender(&session_id).await {
                                         let _ = sender.send(WarpMessage::text(error_message)).await;

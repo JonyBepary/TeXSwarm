@@ -50,9 +50,9 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             server: ServerConfig {
-                api_host: "127.0.0.1".to_string(),
+                api_host: "0.0.0.0".to_string(),
                 api_port: 8080,
-                ws_host: "127.0.0.1".to_string(),
+                ws_host: "0.0.0.0".to_string(),
                 ws_port: 8081,
             },
             network: NetworkConfig {

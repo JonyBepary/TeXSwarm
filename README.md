@@ -412,6 +412,27 @@ If Git synchronization is not working:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+## Recent Network Fixes
+
+We've implemented comprehensive fixes for document synchronization issues:
+
+1. **Complete Network Layer Implementation**:
+   - Added full P2P networking with libp2p
+   - Implemented gossipsub for topic-based messaging
+   - Created request-response protocols for direct peer communication
+
+2. **Robust Document Synchronization**:
+   - Fixed peer ID handling and document subscription
+   - Implemented proper document content synchronization
+   - Added reliable operation broadcasting between peers
+
+3. **Migration Path from Mock to Real Implementation**:
+   - Created service wrapper for smooth transition
+   - Added migration script for testing real implementation
+   - Maintained backward compatibility with existing code
+
+For migration instructions, see [Network Implementation Plan](docs/network_implementation_plan.md).
+
 ## Acknowledgments
 
 - [diamond-types](https://github.com/josephg/diamond-types) for CRDT implementation

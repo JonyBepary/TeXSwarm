@@ -61,6 +61,12 @@ pub struct OperationResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PingResponse {
+    pub status: String,
+    pub server_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorResponse {
     pub error: String,
 }
@@ -95,6 +101,8 @@ impl HttpApi {
             .parse::<std::net::SocketAddr>()
             .map_err(|e| anyhow::anyhow!("Failed to parse API address: {}", e))?;
 
+        tracing::info!("HTTP API binding to socket address: {}", addr);
+
         // Move all dependencies into the tokio::spawn
         tokio::spawn(async move {
             // Create routes directly inside the async block to avoid lifetime issues
@@ -111,6 +119,16 @@ impl HttpApi {
         network_engine: Arc<RwLock<NetworkEngine>>,
         git_manager: Arc<RwLock<GitManager>>,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+        let ping = warp::path("api")
+            .and(warp::path("ping"))
+            .and(warp::get())
+            .map(|| {
+                warp::reply::json(&PingResponse {
+                    status: "ok".to_string(),
+                    server_version: env!("CARGO_PKG_VERSION").to_string(),
+                })
+            });
+
         let create_document = warp::path("documents")
             .and(warp::post())
             .and(warp::body::json())
@@ -174,7 +192,8 @@ impl HttpApi {
             .or(get_document)
             .or(insert_operation)
             .or(delete_operation)
-            .or(git_sync);
+            .or(git_sync)
+            .or(ping);
 
         // Add CORS to the combined API
         api.with(warp::cors().allow_any_origin().allow_methods(vec!["GET", "POST"]))

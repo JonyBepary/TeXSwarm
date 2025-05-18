@@ -1,0 +1,31 @@
+{
+    "server": {
+        "api_host": "0.0.0.0",
+        "api_port": 8080,
+        "ws_host": "0.0.0.0",
+        "ws_port": 8081
+    },
+    "network": {
+        "peer_id_seed": null,
+        "bootstrap_nodes": [],
+        "listen_addresses": [
+            "/ip4/0.0.0.0/tcp/9000"
+        ],
+        "external_addresses": [],
+        "enable_mdns": true,
+        "enable_kad": true
+    },
+    "git": {
+        "repositories_path": "./repositories",
+        "github_token": null,
+        "github_username": null,
+        "github_email": null,
+        "sync_interval_secs": 300
+    },
+    "storage": {
+        "documents_path": "./documents",
+        "max_document_size_mb": 50,
+        "enable_autosave": true,
+        "autosave_interval_seconds": 60
+    }
+}

@@ -72,6 +72,58 @@ The following diagram illustrates the architecture:
 └──────────────────┘     └──────────────────┘          └──────────────────┘
 ```
 
+## Modules & Status
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| CRDT Engine | ✅ Stable | Core functionality working |
+| Network Engine | ✅ Stable | Fixed peer connectivity |
+| Git Integration | ✅ Functional | Basic syncing works |
+| HTTP API | ✅ Stable | All endpoints working |
+| WebSocket API | ✅ Stable | Real-time collaboration functional |
+| Web Frontend | ✅ Modernized | Modern UI with Bootstrap 5 |
+| CLI Tool | ✅ Functional | Actively developed |
+
+## Recent Fixes & Improvements
+
+### Network Connectivity
+- Fixed issues with peer registration and discovery
+- Resolved network-related warnings and unused variables
+- Improved error handling and connection reliability
+- Added detailed logging for troubleshooting
+
+### Web Interface
+- Completely redesigned with a modern Bootstrap 5 interface
+- Improved WebSocket connection reliability with automatic reconnection
+- Enhanced connection status indicators and error reporting
+- Added document templates and improved sharing functionality
+- Fixed cross-origin resource sharing (CORS) issues
+
+### Documentation
+- Added comprehensive troubleshooting guides
+- Created network diagnostics and connectivity testing tools
+- Updated installation and usage documentation
+- Added setup instructions for development environments
+
+## Connectivity Testing
+
+To verify that the web app can connect to the backend server, we've added several tools:
+
+1. **Server Status Check**:
+   ```bash
+   cd /path/to/TeXSwarm/web
+   ./check_server_status.sh
+   ```
+
+2. **Connection Test Tool**:
+   ```bash
+   cd /path/to/TeXSwarm/web
+   ./serve_with_cors.sh
+   # Then open http://localhost:8000/connection_test.html
+   ```
+
+For detailed troubleshooting steps, see [Web Connectivity Troubleshooting](docs/web_connectivity.md).
+
 ## Document Synchronization
 
 TeXSwarm implements a robust document synchronization mechanism that ensures all users see a consistent document state regardless of network conditions. The synchronization is based on the following components:
@@ -99,6 +151,12 @@ TeXSwarm implements a robust document synchronization mechanism that ensures all
 
 Recent improvements to the document synchronization include:
 - Fixed peer ID handling in the NetworkEngine to ensure proper peer identification
+- Updated network implementation to use the latest libp2p API
+- Added proper error handling for network operations
+- Fixed issues with topic subscription and message broadcasting
+- Implemented robust NetworkBehaviour traits for peer discovery
+
+For details on the network implementation fixes, see [Network Fixes](./docs/network_fixes.md).
 - Enhanced document subscription mechanism with better error handling and recovery
 - Improved operation broadcasting to ensure delivery even in challenging network conditions
 - Added document synchronization request capabilities to recover from missed operations

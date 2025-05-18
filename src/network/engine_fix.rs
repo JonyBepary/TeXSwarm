@@ -3,18 +3,17 @@
 
 use anyhow::Result;
 use dashmap::DashMap;
-use libp2p::{PeerId, request_response};
+use libp2p::PeerId;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::crdt::engine::CrdtEngine;
 use crate::network::peer::PeerRegistry;
-use crate::network::protocol::{CollabRequest, CollabResponse, NetworkMessage};
+use crate::network::engine::{DocumentTopic, NetworkService};
+use crate::network::protocol::NetworkMessage;
 use crate::utils::config::NetworkConfig;
 use crate::utils::errors::AppError;
-
-// Implementation of the NetworkService remains the same
 
 /// The NetworkEngine manages the P2P network connections and message routing
 #[derive(Debug)]
@@ -29,7 +28,29 @@ pub struct NetworkEngine {
 }
 
 impl NetworkEngine {
-    // Constructor remains the same
+    pub async fn new(config: &NetworkConfig, crdt_engine: Arc<RwLock<CrdtEngine>>) -> Result<Self> {
+        // Create a peer registry with the specified timeout duration
+        let peer_registry = Arc::new(RwLock::new(PeerRegistry::new(std::time::Duration::from_secs(300))));
+
+        Ok(Self {
+            service: None,
+            peer_registry: peer_registry.clone(),
+            crdt_engine,
+            config: config.clone(),
+            document_subscribers: dashmap::DashMap::new(),
+        })
+    }
+
+    pub async fn start(&mut self) -> Result<()> {
+        // Initialize the network service with the configuration
+        let service = NetworkService::new(self.config.clone()).await?;
+        self.service = Some(service);
+
+        // Start the main network event loop as a background task
+        self.start_event_loop().await?;
+
+        Ok(())
+    }
 
     /// Get the local peer ID
     pub async fn get_local_peer_id(&self) -> Result<String> {
@@ -40,7 +61,16 @@ impl NetworkEngine {
         }
     }
 
-    // The rest of the implementation remains the same, but we make some changes to broadcast_operation
+    pub async fn stop(&mut self) -> Result<()> {
+        // Network service will be dropped when Option is cleared
+        self.service = None;
+        Ok(())
+    }
+
+    async fn start_event_loop(&mut self) -> Result<()> {
+        // Implementation details would be similar to engine.rs
+        Ok(())
+    }
 
     /// Broadcast an operation to all subscribed peers
     pub async fn broadcast_operation(&mut self, doc_id: &Uuid, operation: Vec<u8>) -> Result<()> {
@@ -99,67 +129,5 @@ impl NetworkEngine {
         Ok(())
     }
 
-    // The rest of the implementation remains the same
-}
-
-/// Topics for different document events - this needs to be in the module scope
-pub enum DocumentTopic {
-    /// Topic for document operations
-    Operations(Uuid),
-    /// Topic for document presence updates
-    Presence(Uuid),
-    /// Topic for document metadata updates
-    Metadata(Uuid),
-}
-
-impl DocumentTopic {
-    /// Convert to a topic string
-    pub fn to_topic_string(&self) -> String {
-        match self {
-            DocumentTopic::Operations(id) => format!("doc-ops/{}", id),
-            DocumentTopic::Presence(id) => format!("doc-presence/{}", id),
-            DocumentTopic::Metadata(id) => format!("doc-meta/{}", id),
-        }
-    }
-}
-
-// NetworkService mock implementation for testing - this should match what's in the original file
-#[derive(Debug)]
-pub struct NetworkService {
-    /// Local peer ID
-    local_peer_id: PeerId,
-    /// Sender for network events
-    event_sender: mpsc::Sender<NetworkEvent>,
-}
-
-// The rest of the NetworkService implementation would be included here
-
-/// Network events that can be sent to the application
-#[derive(Debug)]
-pub enum NetworkEvent {
-    /// New peer discovered
-    PeerDiscovered(PeerId),
-    /// Peer connection established
-    PeerConnected(PeerId),
-    /// Peer disconnected
-    PeerDisconnected(PeerId),
-    /// Message received on a topic
-    MessageReceived {
-        source: PeerId,
-        topic: String,
-        data: Vec<u8>,
-    },
-    /// Request received from a peer
-    RequestReceived {
-        request_id: request_response::RequestId,
-        source: PeerId,
-        request: CollabRequest,
-        channel: request_response::ResponseChannel<CollabResponse>,
-    },
-    /// Response received from a peer
-    ResponseReceived {
-        request_id: String,
-        source: PeerId,
-        response: CollabResponse,
-    },
+    // Additional methods would be implemented here
 }

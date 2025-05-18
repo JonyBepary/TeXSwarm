@@ -260,7 +260,7 @@ fn create_test_config(instance_id: u16) -> Config {
 /// Get the local peer ID (with a workaround for missing implementation)
 async fn get_peer_id(app: &P2PLatexCollab) -> Result<String> {
     let network = app.network_engine.clone();
-    let net = network.read().await;
+    let _net = network.read().await;
 
     // Since get_local_peer_id is not implemented, we'll return a placeholder based on app address
     Ok(format!("peer-{:p}", app))

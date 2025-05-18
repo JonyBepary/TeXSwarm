@@ -2,6 +2,30 @@
 
 A modern web-based frontend for the TeXSwarm decentralized LaTeX collaboration platform. It provides an intuitive interface for creating, editing, and collaborating on LaTeX documents in real-time.
 
+## Important Notice
+
+**We have a new improved web app implementation!**
+
+The original web app (index.html) had connectivity issues with showing "Offline" status and login problems. We've created a new web app with improved connectivity and a more robust implementation:
+
+- **New Web App**: Use `new-index.html` for a better experience
+- **New Server Script**: Use `serve_new_app.sh` to test the new web app
+- **Documentation**: See `/docs/new_web_app.md` and `/docs/web_app_summary.md` for details
+
+To use the new web app:
+```bash
+# Start the backend server
+cd /jony/rust-pract/TeXSwarm
+cargo run --bin p2p-latex-collab-server
+
+# In another terminal, serve the web app
+cd /jony/rust-pract/TeXSwarm/web
+./serve_new_app.sh
+
+# Access in browser
+# http://localhost:8090/new-index.html
+```
+
 ## Features
 
 - **Real-time collaborative editing** through WebSockets
@@ -11,23 +35,6 @@ A modern web-based frontend for the TeXSwarm decentralized LaTeX collaboration p
 - **Git repository integration** for version control
 - **Live LaTeX preview** with MathJax rendering
 - **Modern, responsive UI** with Bootstrap 5
-
-## Getting Started
-
-### Prerequisites
-
-- A running instance of the TeXSwarm backend server
-- Modern web browser (Chrome, Firefox, Safari, Edge)
-
-### Setup
-
-1. Ensure the backend server is running on the configured host and port
-2. Open `index.html` in a web browser or run the provided server:
-   ```
-   ./serve.sh
-   ```
-3. Enter your name to start collaborating
-4. Create a new document or open an existing one
 
 ### Configuration
 

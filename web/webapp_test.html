@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeXSwarm Connectivity Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .test-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+
+        .test-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .log-container {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #fff;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin-top: 10px;
+        }
+
+        .log-entry {
+            margin: 4px 0;
+            font-size: 14px;
+        }
+
+        .success {
+            color: #27ae60;
+        }
+
+        .error {
+            color: #e74c3c;
+        }
+
+        .info {
+            color: #2980b9;
+        }
+
+        .warning {
+            color: #f39c12;
+        }
+
+        .test-status {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .status-pending {
+            background-color: #f1c40f;
+            color: #000;
+        }
+
+        .status-success {
+            background-color: #2ecc71;
+            color: #fff;
+        }
+
+        .status-error {
+            background-color: #e74c3c;
+            color: #fff;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .config-section {
+            margin-bottom: 20px;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .config-field {
+            display: flex;
+            align-items: center;
+        }
+
+        .config-field label {
+            width: 120px;
+            font-weight: bold;
+        }
+
+        .config-field input {
+            flex: 1;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>TeXSwarm Connectivity Test</h1>
+
+    <div class="config-section">
+        <h2>Server Configuration</h2>
+        <div class="config-grid">
+            <div class="config-field">
+                <label for="api-host">API Host:</label>
+                <input type="text" id="api-host" value="localhost">
+            </div>
+            <div class="config-field">
+                <label for="api-port">API Port:</label>
+                <input type="text" id="api-port" value="8080">
+            </div>
+            <div class="config-field">
+                <label for="ws-host">WebSocket Host:</label>
+                <input type="text" id="ws-host" value="localhost">
+            </div>
+            <div class="config-field">
+                <label for="ws-port">WebSocket Port:</label>
+                <input type="text" id="ws-port" value="8081">
+            </div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">
+            <span>1. HTTP API Ping Test</span>
+            <span class="test-status status-pending" id="ping-status">Pending</span>
+        </div>
+        <p>Tests basic connectivity to the HTTP API server by calling the /api/ping endpoint.</p>
+        <div class="log-container" id="ping-log"></div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">
+            <span>2. User Registration Test</span>
+            <span class="test-status status-pending" id="user-status">Pending</span>
+        </div>
+        <p>Tests user registration via the /api/users endpoint.</p>
+        <div class="log-container" id="user-log"></div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">
+            <span>3. WebSocket Connection Test</span>
+            <span class="test-status status-pending" id="ws-status">Pending</span>
+        </div>
+        <p>Tests connectivity to the WebSocket server and authentication.</p>
+        <div class="log-container" id="ws-log"></div>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">
+            <span>4. Document Creation Test</span>
+            <span class="test-status status-pending" id="doc-status">Pending</span>
+        </div>
+        <p>Tests document creation via the /api/documents endpoint.</p>
+        <div class="log-container" id="doc-log"></div>
+    </div>
+
+    <div class="button-container">
+        <button id="run-all-btn">Run All Tests</button>
+        <button id="clear-logs-btn">Clear Logs</button>
+    </div>
+
+    <script>
+        // Configuration and global variables
+        let config = {
+            apiHost: 'localhost',
+            apiPort: '8080',
+            wsHost: 'localhost',
+            wsPort: '8081'
+        };
+
+        let globalUserId = null;
+        let globalDocumentId = null;
+        let websocket = null;
+
+        // Utility functions
+        function log(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = message;
+            container.appendChild(logEntry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateStatus(id, status, message = '') {
+            const element = document.getElementById(id);
+            element.className = `test-status status-${status}`;
+            element.textContent = message || status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function clearLogs() {
+            document.querySelectorAll('.log-container').forEach(container => {
+                container.innerHTML = '';
+            });
+
+            document.querySelectorAll('.test-status').forEach(status => {
+                status.className = 'test-status status-pending';
+                status.textContent = 'Pending';
+            });
+        }
+
+        function updateConfig() {
+            config.apiHost = document.getElementById('api-host').value || 'localhost';
+            config.apiPort = document.getElementById('api-port').value || '8080';
+            config.wsHost = document.getElementById('ws-host').value || 'localhost';
+            config.wsPort = document.getElementById('ws-port').value || '8081';
+        }
+
+        // Test functions
+        async function testPing() {
+            updateStatus('ping-status', 'pending', 'Testing...');
+            log('ping-log', 'Starting API ping test...', 'info');
+            log('ping-log', `Connecting to http://${config.apiHost}:${config.apiPort}/api/ping`, 'info');
+
+            try {
+                const response = await fetch(`http://${config.apiHost}:${config.apiPort}/api/ping`);
+                if (response.ok) {
+                    const data = await response.json();
+                    log('ping-log', `API ping successful. Server version: ${data.server_version}`, 'success');
+                    updateStatus('ping-status', 'success');
+                    return true;
+                } else {
+                    log('ping-log', `API ping failed with status: ${response.status}`, 'error');
+                    updateStatus('ping-status', 'error');
+                    return false;
+                }
+            } catch (error) {
+                log('ping-log', `Error connecting to API: ${error.message}`, 'error');
+                updateStatus('ping-status', 'error');
+                return false;
+            }
+        }
+
+        async function testUserRegistration() {
+            updateStatus('user-status', 'pending', 'Testing...');
+            log('user-log', 'Starting user registration test...', 'info');
+            log('user-log', `Connecting to http://${config.apiHost}:${config.apiPort}/api/users`, 'info');
+
+            try {
+                const username = `TestUser_${Math.floor(Math.random() * 10000)}`;
+                const response = await fetch(`http://${config.apiHost}:${config.apiPort}/api/users`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: username })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    globalUserId = data.id;
+                    log('user-log', `User registration successful. User ID: ${data.id}`, 'success');
+                    log('user-log', `Username: ${data.name}`, 'info');
+                    updateStatus('user-status', 'success');
+                    return true;
+                } else {
+                    log('user-log', `User registration failed with status: ${response.status}`, 'error');
+                    updateStatus('user-status', 'error');
+                    return false;
+                }
+            } catch (error) {
+                log('user-log', `Error during user registration: ${error.message}`, 'error');
+                updateStatus('user-status', 'error');
+                return false;
+            }
+        }
+
+        async function testWebSocketConnection() {
+            updateStatus('ws-status', 'pending', 'Testing...');
+            log('ws-log', 'Starting WebSocket connection test...', 'info');
+
+            if (!globalUserId) {
+                log('ws-log', 'User registration must succeed first', 'warning');
+                updateStatus('ws-status', 'error');
+                return false;
+            }
+
+            // Close existing connection if any
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
+            }
+
+            log('ws-log', `Connecting to WebSocket at ws://${config.wsHost}:${config.wsPort}/ws`, 'info');
+
+            return new Promise((resolve) => {
+                try {
+                    websocket = new WebSocket(`ws://${config.wsHost}:${config.wsPort}/ws`);
+
+                    websocket.onopen = () => {
+                        log('ws-log', 'WebSocket connection established', 'success');
+
+                        // Send authentication message
+                        const authMessage = {
+                            type: 'Authentication',
+                            payload: {
+                                user_id: globalUserId,
+                                token: null
+                            }
+                        };
+
+                        log('ws-log', 'Sending authentication message', 'info');
+                        websocket.send(JSON.stringify(authMessage));
+
+                        // Wait a bit to see if we get any errors
+                        setTimeout(() => {
+                            log('ws-log', 'Authentication sent successfully', 'success');
+                            updateStatus('ws-status', 'success');
+                            resolve(true);
+                        }, 1000);
+                    };
+
+                    websocket.onmessage = (event) => {
+                        log('ws-log', `Received message: ${event.data}`, 'info');
+                    };
+
+                    websocket.onerror = (error) => {
+                        log('ws-log', `WebSocket error: ${error}`, 'error');
+                        updateStatus('ws-status', 'error');
+                        resolve(false);
+                    };
+
+                    websocket.onclose = (event) => {
+                        log('ws-log', `WebSocket closed with code: ${event.code}`,
+                            event.code === 1000 ? 'info' : 'warning');
+                    };
+
+                    // Set a timeout in case the connection hangs
+                    setTimeout(() => {
+                        if (websocket.readyState !== WebSocket.OPEN) {
+                            log('ws-log', 'WebSocket connection timed out', 'error');
+                            updateStatus('ws-status', 'error');
+                            resolve(false);
+                        }
+                    }, 5000);
+
+                } catch (error) {
+                    log('ws-log', `Error creating WebSocket: ${error.message}`, 'error');
+                    updateStatus('ws-status', 'error');
+                    resolve(false);
+                }
+            });
+        }
+
+        async function testDocumentCreation() {
+            updateStatus('doc-status', 'pending', 'Testing...');
+            log('doc-log', 'Starting document creation test...', 'info');
+
+            if (!globalUserId) {
+                log('doc-log', 'User registration must succeed first', 'warning');
+                updateStatus('doc-status', 'error');
+                return false;
+            }
+
+            try {
+                const docTitle = `Test Document ${Math.floor(Math.random() * 10000)}`;
+                log('doc-log', `Creating document with title: ${docTitle}`, 'info');
+
+                const response = await fetch(`http://${config.apiHost}:${config.apiPort}/api/documents`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-ID': globalUserId
+                    },
+                    body: JSON.stringify({
+                        title: docTitle,
+                        owner_id: globalUserId
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    globalDocumentId = data.document_id || data.id;
+                    log('doc-log', `Document created successfully. ID: ${globalDocumentId}`, 'success');
+                    updateStatus('doc-status', 'success');
+                    return true;
+                } else {
+                    log('doc-log', `Document creation failed with status: ${response.status}`, 'error');
+                    try {
+                        const error = await response.json();
+                        log('doc-log', `Error: ${JSON.stringify(error)}`, 'error');
+                    } catch (e) {
+                        // If response is not JSON, ignore
+                    }
+                    updateStatus('doc-status', 'error');
+                    return false;
+                }
+            } catch (error) {
+                log('doc-log', `Error during document creation: ${error.message}`, 'error');
+                updateStatus('doc-status', 'error');
+                return false;
+            }
+        }
+
+        // Run all tests in sequence
+        async function runAllTests() {
+            // Update configuration
+            updateConfig();
+
+            // Disable run button while tests are running
+            document.getElementById('run-all-btn').disabled = true;
+
+            // Run tests in sequence
+            const pingSuccess = await testPing();
+            let userSuccess = false;
+            let wsSuccess = false;
+            let docSuccess = false;
+
+            if (pingSuccess) {
+                userSuccess = await testUserRegistration();
+
+                if (userSuccess) {
+                    wsSuccess = await testWebSocketConnection();
+                    docSuccess = await testDocumentCreation();
+                }
+            }
+
+            // Enable run button when done
+            document.getElementById('run-all-btn').disabled = false;
+
+            // Show summary
+            log('doc-log', '---------------- TEST SUMMARY ----------------', 'info');
+            log('doc-log', `HTTP API Ping: ${pingSuccess ? 'SUCCESS' : 'FAILED'}`, pingSuccess ? 'success' : 'error');
+            log('doc-log', `User Registration: ${userSuccess ? 'SUCCESS' : 'FAILED'}`, userSuccess ? 'success' : 'error');
+            log('doc-log', `WebSocket Connection: ${wsSuccess ? 'SUCCESS' : 'FAILED'}`, wsSuccess ? 'success' : 'error');
+            log('doc-log', `Document Creation: ${docSuccess ? 'SUCCESS' : 'FAILED'}`, docSuccess ? 'success' : 'error');
+        }
+
+        // Event listeners
+        document.getElementById('run-all-btn').addEventListener('click', runAllTests);
+        document.getElementById('clear-logs-btn').addEventListener('click', clearLogs);
+
+        // Initialize configuration from URL parameters if present
+        function initFromUrlParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+
+            if (urlParams.has('apiHost')) document.getElementById('api-host').value = urlParams.get('apiHost');
+            if (urlParams.has('apiPort')) document.getElementById('api-port').value = urlParams.get('apiPort');
+            if (urlParams.has('wsHost')) document.getElementById('ws-host').value = urlParams.get('wsHost');
+            if (urlParams.has('wsPort')) document.getElementById('ws-port').value = urlParams.get('wsPort');
+
+            // If autorun parameter is present, run tests automatically
+            if (urlParams.has('autorun')) {
+                setTimeout(runAllTests, 500);
+            }
+        }
+
+        // Initialize the page
+        initFromUrlParams();
+    </script>
+</body>
+
+</html>

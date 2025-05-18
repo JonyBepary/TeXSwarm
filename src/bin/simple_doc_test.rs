@@ -8,7 +8,7 @@ use std::{
     time::Duration,
     path::PathBuf,
 };
-use uuid::Uuid;
+// use uuid::Uuid;
 
 /// A simple document test to verify basic synchronization works
 #[tokio::main]

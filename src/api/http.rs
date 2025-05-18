@@ -17,6 +17,7 @@ use crate::utils::errors::AppError;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateDocumentRequest {
     pub title: String,
+    #[serde(alias = "owner_id")]
     pub owner: String,
 }
 
@@ -147,37 +148,39 @@ impl HttpApi {
             .and(warp::body::json())
             .and_then(Self::handle_user_registration);
 
-        let create_document = warp::path("documents")
+        let create_document = warp::path("api")
+            .and(warp::path("documents"))
             .and(warp::post())
             .and(warp::body::json())
             .and(with_crdt_engine(crdt_engine.clone()))
             .and_then(Self::handle_create_document);
 
-        let list_documents = warp::path("documents")
+        let list_documents = warp::path("api")
+            .and(warp::path("documents"))
             .and(warp::get())
             .and(with_crdt_engine(crdt_engine.clone()))
             .and_then(Self::handle_list_documents);
 
-        let get_document = warp::path!("documents" / String)
+        let get_document = warp::path!("api" / "documents" / String)
             .and(warp::get())
             .and(with_crdt_engine(crdt_engine.clone()))
             .and_then(Self::handle_get_document);
 
-        let insert_operation = warp::path!("documents" / String / "insert")
+        let insert_operation = warp::path!("api" / "documents" / String / "insert")
             .and(warp::post())
             .and(warp::body::json())
             .and(with_crdt_engine(crdt_engine.clone()))
             .and(with_network_engine(network_engine.clone()))
             .and_then(Self::handle_insert_operation);
 
-        let delete_operation = warp::path!("documents" / String / "delete")
+        let delete_operation = warp::path!("api" / "documents" / String / "delete")
             .and(warp::post())
             .and(warp::body::json())
             .and(with_crdt_engine(crdt_engine.clone()))
             .and(with_network_engine(network_engine.clone()))
             .and_then(Self::handle_delete_operation);
 
-        let git_sync = warp::path!("documents" / String / "sync")
+        let git_sync = warp::path!("api" / "documents" / String / "sync")
             .and(warp::post())
             .and(with_crdt_engine(crdt_engine.clone()))
             .and(with_git_manager(git_manager.clone()))
@@ -204,8 +207,6 @@ impl HttpApi {
                 resp
             });
 
-
-
         // Combine all routes
         let api = create_document
             .or(list_documents)
@@ -216,8 +217,11 @@ impl HttpApi {
             .or(user_registration)
             .or(ping);
 
-        // Add CORS to the combined API
-        api.with(warp::cors().allow_any_origin().allow_methods(vec!["GET", "POST"]))
+        // Add CORS to the combined API with extended methods and headers
+        api.with(warp::cors()
+           .allow_any_origin()
+           .allow_headers(vec!["content-type", "x-user-id", "authorization"])
+           .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"]))
     }
 
     /// Creates routes for this HTTP API instance - kept for backwards compatibility
@@ -254,9 +258,12 @@ impl HttpApi {
         req: CreateDocumentRequest,
         crdt_engine: Arc<RwLock<CrdtEngine>>,
     ) -> Result<impl Reply, Infallible> {
+        tracing::info!("Creating document: title={:?}, owner={:?}", req.title, req.owner);
+
         let result: Result<warp::reply::Json, anyhow::Error> = async {
             let engine = crdt_engine.read().await;
             let document_id = engine.create_document(req.title, req.owner).await?;
+            tracing::info!("Document created successfully with ID: {}", document_id);
             Ok(warp::reply::json(&CreateDocumentResponse { document_id }))
         }
         .await;

@@ -363,6 +363,29 @@ impl WebSocketServer {
             self.broadcast_presence(doc_id).await?;
         }
 
+        tracing::info!("Session removed: {}", session_id);
+        Ok(())
+    }
+
+    /// Send a heartbeat message to all connected clients
+    pub async fn send_heartbeat(&self) -> Result<()> {
+        // Get all sessions
+        let sessions = self.sessions.read().await;
+
+        // Create a heartbeat message
+        let heartbeat = serde_json::to_string(&ApiMessage::Heartbeat {
+            timestamp: chrono::Utc::now().to_rfc3339()
+        })?;
+
+        tracing::info!("Sending heartbeat to {} connected clients", sessions.len());
+
+        // Send heartbeat to all connected clients
+        for (session_id, session) in sessions.iter() {
+            if let Err(e) = session.sender.send(WarpMessage::text(heartbeat.clone())).await {
+                tracing::warn!("Error sending heartbeat to session {}: {:?}", session_id, e);
+            }
+        }
+
         Ok(())
     }
 }

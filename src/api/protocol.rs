@@ -59,6 +59,12 @@ pub enum ApiMessage {
         documents: Vec<DocumentSummary>,
     },
 
+    /// Server heartbeat to check connection status
+    Heartbeat {
+        /// Current server timestamp
+        timestamp: String,
+    },
+
     /// Error message
     Error {
         /// Error code

@@ -14,6 +14,8 @@ pub struct ApiServer {
     http_api: HttpApi,
     websocket_server: WebSocketServer,
     config: Config,
+    // Optional heartbeat task handle
+    heartbeat_task: Arc<RwLock<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl ApiServer {
@@ -37,6 +39,7 @@ impl ApiServer {
             http_api,
             websocket_server,
             config: config.clone(),
+            heartbeat_task: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -51,11 +54,41 @@ impl ApiServer {
         self.websocket_server.start(&self.config).await?;
         info!("WebSocket server started successfully on {}:{}", self.config.server.ws_host, self.config.server.ws_port);
 
+        // Start the heartbeat task
+        let websocket_server = self.websocket_server.clone();
+        let heartbeat_task = tokio::spawn(async move {
+            let heartbeat_interval = tokio::time::Duration::from_secs(30); // 30 seconds
+
+            loop {
+                tokio::time::sleep(heartbeat_interval).await;
+
+                if let Err(e) = websocket_server.send_heartbeat().await {
+                    tracing::error!("Error sending heartbeat: {:?}", e);
+                }
+            }
+        });
+
+        {
+            let mut task_handle = self.heartbeat_task.write().await;
+            *task_handle = Some(heartbeat_task);
+        }
+
+        info!("WebSocket heartbeat task started");
+
         Ok(())
     }
 
     pub async fn stop(&self) -> Result<()> {
         info!("Shutting down API servers...");
+
+        // Stop the heartbeat task if it's running
+        {
+            let mut task_handle = self.heartbeat_task.write().await;
+            if let Some(handle) = task_handle.take() {
+                info!("Stopping WebSocket heartbeat task");
+                handle.abort();
+            }
+        }
 
         // Currently, we don't have explicit stop methods for our servers as they
         // run in Tokio tasks. In a more complex application, we might use shutdown

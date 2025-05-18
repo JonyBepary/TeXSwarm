@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeXSwarm Connectivity Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        h1,
+        h2 {
+            color: #333;
+        }
+
+        .config-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+
+        .test-section {
+            margin-top: 20px;
+        }
+
+        .test-result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .neutral {
+            background-color: #e2e3e5;
+            border-color: #d6d8db;
+            color: #383d41;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        input {
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 250px;
+        }
+
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+
+        .summary {
+            margin-top: 30px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>TeXSwarm Server Connectivity Test</h1>
+
+    <div class="config-section">
+        <h2>Server Configuration</h2>
+        <div>
+            <label for="httpServer">HTTP API:</label>
+            <input type="text" id="httpServer" value="http://localhost:8080">
+        </div>
+        <div>
+            <label for="wsServer">WebSocket:</label>
+            <input type="text" id="wsServer" value="ws://localhost:8081">
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Connectivity Tests</h2>
+        <div>
+            <button onclick="testHttpPing()">Test HTTP API</button>
+            <button onclick="testWebSocket()">Test WebSocket</button>
+            <button onclick="runAllTests()">Run All Tests</button>
+        </div>
+
+        <div id="httpResult" class="test-result neutral">
+            HTTP API status will appear here...
+        </div>
+
+        <div id="wsResult" class="test-result neutral">
+            WebSocket status will appear here...
+        </div>
+    </div>
+
+    <div class="summary">
+        <h2>Test Summary</h2>
+        <ul id="testSummary">
+            <li>No tests run yet</li>
+        </ul>
+    </div>
+
+    <script>
+        // Store test results
+        const testResults = {
+            http: false,
+            ws: false
+        };
+
+        // Test HTTP API ping
+        function testHttpPing() {
+            const httpServer = document.getElementById('httpServer').value;
+            const resultDiv = document.getElementById('httpResult');
+
+            resultDiv.innerHTML = 'Testing HTTP API connection...';
+            resultDiv.className = 'test-result neutral';
+
+            fetch(`${httpServer}/api/ping`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    resultDiv.innerHTML = `✅ Success! HTTP API is responsive.<br>
+                        <strong>Status:</strong> ${data.status}<br>
+                        <strong>Server Version:</strong> ${data.server_version}`;
+                    resultDiv.className = 'test-result success';
+                    testResults.http = true;
+                    updateSummary();
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = `❌ Error: ${error.message}`;
+                    resultDiv.className = 'test-result error';
+                    testResults.http = false;
+                    updateSummary();
+                });
+        }
+
+        // Test WebSocket connection
+        function testWebSocket() {
+            const wsServer = document.getElementById('wsServer').value;
+            const resultDiv = document.getElementById('wsResult');
+
+            resultDiv.innerHTML = 'Testing WebSocket connection...';
+            resultDiv.className = 'test-result neutral';
+
+            try {
+                const socket = new WebSocket(wsServer);
+
+                socket.onopen = function () {
+                    resultDiv.innerHTML = `✅ Success! WebSocket connection established.`;
+                    resultDiv.className = 'test-result success';
+                    testResults.ws = true;
+                    updateSummary();
+
+                    // Close socket after success
+                    setTimeout(() => socket.close(), 1000);
+                };
+
+                socket.onerror = function (error) {
+                    resultDiv.innerHTML = `❌ Error: WebSocket connection failed.`;
+                    resultDiv.className = 'test-result error';
+                    testResults.ws = false;
+                    updateSummary();
+                };
+
+                // Set a timeout to handle connection failures
+                setTimeout(() => {
+                    if (socket.readyState !== 1) { // 1 = OPEN
+                        resultDiv.innerHTML = `❌ Error: WebSocket connection timed out.`;
+                        resultDiv.className = 'test-result error';
+                        testResults.ws = false;
+                        updateSummary();
+                    }
+                }, 5000);
+            } catch (e) {
+                resultDiv.innerHTML = `❌ Error: ${e.message}`;
+                resultDiv.className = 'test-result error';
+                testResults.ws = false;
+                updateSummary();
+            }
+        }
+
+        // Run all tests
+        function runAllTests() {
+            testHttpPing();
+            setTimeout(testWebSocket, 500); // Small delay between tests
+        }
+
+        // Update summary
+        function updateSummary() {
+            const summaryList = document.getElementById('testSummary');
+
+            let items = [];
+            if (testResults.http === true) {
+                items.push('<li>✅ HTTP API: Connected successfully</li>');
+            } else if (testResults.http === false) {
+                items.push('<li>❌ HTTP API: Connection failed</li>');
+            } else {
+                items.push('<li>⚠️ HTTP API: Not tested</li>');
+            }
+
+            if (testResults.ws === true) {
+                items.push('<li>✅ WebSocket: Connected successfully</li>');
+            } else if (testResults.ws === false) {
+                items.push('<li>❌ WebSocket: Connection failed</li>');
+            } else {
+                items.push('<li>⚠️ WebSocket: Not tested</li>');
+            }
+
+            // Add timestamp
+            items.push(`<li><em>Last updated: ${new Date().toLocaleTimeString()}</em></li>`);
+
+            summaryList.innerHTML = items.join('\n');
+        }
+    </script>
+</body>
+
+</html>

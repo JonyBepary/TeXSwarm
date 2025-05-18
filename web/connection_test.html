@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeXSwarm Connection Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #2b64bd;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .pending {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+
+        button {
+            background-color: #2b64bd;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #1a4b98;
+        }
+
+        code {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 3px 6px;
+            border-radius: 3px;
+        }
+
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+
+        #log {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>TeXSwarm Connection Test</h1>
+
+    <div class="card">
+        <h2>HTTP API Connection</h2>
+        <div id="http-status" class="status pending">Testing...</div>
+        <button id="test-http">Test HTTP Connection</button>
+    </div>
+
+    <div class="card">
+        <h2>WebSocket Connection</h2>
+        <div id="ws-status" class="status pending">Testing...</div>
+        <button id="test-ws">Test WebSocket Connection</button>
+    </div>
+
+    <div class="card">
+        <h2>Configuration</h2>
+        <p>HTTP API: <code id="http-url">http://localhost:8080</code></p>
+        <p>WebSocket: <code id="ws-url">ws://localhost:8081/ws</code></p>
+        <button id="update-config">Update Configuration</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        // Configuration
+        const API_HOST = window.location.hostname || 'localhost';
+        const API_PORT = 8080;
+        const WS_HOST = window.location.hostname || 'localhost';
+        const WS_PORT = 8081;
+
+        // Elements
+        const httpStatus = document.getElementById('http-status');
+        const wsStatus = document.getElementById('ws-status');
+        const httpUrlElement = document.getElementById('http-url');
+        const wsUrlElement = document.getElementById('ws-url');
+        const log = document.getElementById('log');
+
+        // Update displayed URLs
+        httpUrlElement.textContent = `http://${API_HOST}:${API_PORT}`;
+        wsUrlElement.textContent = `ws://${WS_HOST}:${WS_PORT}/ws`;
+
+        // Log function
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = type;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Test HTTP connection
+        document.getElementById('test-http').addEventListener('click', async () => {
+            httpStatus.className = 'status pending';
+            httpStatus.textContent = 'Testing...';
+
+            try {
+                addLog(`Testing HTTP connection to ${httpUrlElement.textContent}`);
+
+                const response = await fetch(`http://${API_HOST}:${API_PORT}/api/ping`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    httpStatus.className = 'status success';
+                    httpStatus.textContent = 'Connected successfully!';
+                    addLog(`HTTP connection successful: ${JSON.stringify(data)}`, 'success');
+                } else {
+                    throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+                }
+            } catch (error) {
+                httpStatus.className = 'status error';
+                httpStatus.textContent = 'Connection failed';
+                addLog(`HTTP connection failed: ${error.message}`, 'error');
+
+                // Provide fallback test to root path
+                try {
+                    addLog('Trying fallback HTTP connection test to root path');
+                    const fallbackResponse = await fetch(`http://${API_HOST}:${API_PORT}/`);
+
+                    if (fallbackResponse.ok) {
+                        addLog('Fallback HTTP connection successful (server is running but /api/ping endpoint not available)', 'warning');
+                    }
+                } catch (fallbackError) {
+                    addLog(`Fallback HTTP connection also failed: ${fallbackError.message}`, 'error');
+                }
+            }
+        });
+
+        // Test WebSocket connection
+        document.getElementById('test-ws').addEventListener('click', () => {
+            wsStatus.className = 'status pending';
+            wsStatus.textContent = 'Testing...';
+
+            try {
+                addLog(`Testing WebSocket connection to ${wsUrlElement.textContent}`);
+
+                const ws = new WebSocket(`ws://${WS_HOST}:${WS_PORT}/ws`);
+
+                ws.onopen = () => {
+                    wsStatus.className = 'status success';
+                    wsStatus.textContent = 'Connected successfully!';
+                    addLog('WebSocket connection established!', 'success');
+
+                    // Send a test message
+                    const testMessage = {
+                        type: 'ping',
+                        timestamp: new Date().toISOString()
+                    };
+                    ws.send(JSON.stringify(testMessage));
+                    addLog(`Sent test message: ${JSON.stringify(testMessage)}`);
+
+                    // Close after 5 seconds
+                    setTimeout(() => {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.close();
+                            addLog('Closed WebSocket connection after 5 seconds');
+                        }
+                    }, 5000);
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        addLog(`Received message: ${JSON.stringify(data)}`, 'success');
+                    } catch (error) {
+                        addLog(`Received non-JSON message: ${event.data}`, 'warning');
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    wsStatus.className = 'status error';
+                    wsStatus.textContent = 'Connection failed';
+                    addLog(`WebSocket error: ${error.message || 'Unknown error'}`, 'error');
+                };
+
+                ws.onclose = (event) => {
+                    if (event.wasClean) {
+                        addLog(`WebSocket closed cleanly, code=${event.code}, reason=${event.reason || 'None provided'}`);
+                    } else {
+                        addLog(`WebSocket connection died unexpectedly, code=${event.code}`, 'error');
+                    }
+                };
+            } catch (error) {
+                wsStatus.className = 'status error';
+                wsStatus.textContent = 'Connection failed';
+                addLog(`WebSocket initialization error: ${error.message}`, 'error');
+            }
+        });
+
+        // Update configuration
+        document.getElementById('update-config').addEventListener('click', () => {
+            const newHttpHost = prompt('Enter HTTP host (default: localhost):', API_HOST);
+            const newHttpPort = prompt('Enter HTTP port (default: 8080):', API_PORT);
+            const newWsHost = prompt('Enter WebSocket host (default: localhost):', WS_HOST);
+            const newWsPort = prompt('Enter WebSocket port (default: 8081):', WS_PORT);
+
+            if (newHttpHost && newHttpPort && newWsHost && newWsPort) {
+                location.href = `?http_host=${newHttpHost}&http_port=${newHttpPort}&ws_host=${newWsHost}&ws_port=${newWsPort}`;
+            }
+        });
+
+        // Check for URL parameters
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+
+            if (params.has('http_host') || params.has('http_port') || params.has('ws_host') || params.has('ws_port')) {
+                const httpHost = params.get('http_host') || API_HOST;
+                const httpPort = params.get('http_port') || API_PORT;
+                const wsHost = params.get('ws_host') || WS_HOST;
+                const wsPort = params.get('ws_port') || WS_PORT;
+
+                httpUrlElement.textContent = `http://${httpHost}:${httpPort}`;
+                wsUrlElement.textContent = `ws://${wsHost}:${wsPort}/ws`;
+
+                addLog(`Using custom configuration - HTTP: ${httpUrlElement.textContent}, WebSocket: ${wsUrlElement.textContent}`);
+            }
+        });
+
+        // Auto-run tests
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                document.getElementById('test-http').click();
+
+                setTimeout(() => {
+                    document.getElementById('test-ws').click();
+                }, 1000);
+            }, 500);
+        });
+    </script>
+</body>
+
+</html>

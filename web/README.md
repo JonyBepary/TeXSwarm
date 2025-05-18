@@ -1,27 +1,32 @@
-# P2P LaTeX Collaboration Tool - Web Frontend
+# TeXSwarm - Web Frontend
 
-This is a simple web-based frontend demo for the P2P LaTeX Collaboration Tool. It provides a user interface for creating, editing, and collaborating on LaTeX documents using the backend API.
+A modern web-based frontend for the TeXSwarm decentralized LaTeX collaboration platform. It provides an intuitive interface for creating, editing, and collaborating on LaTeX documents in real-time.
 
 ## Features
 
 - **Real-time collaborative editing** through WebSockets
 - **Document management** (create, open, save)
-- **User presence** indicators showing who's actively editing
-- **Document sharing** for adding collaborators
-- **LaTeX preview** to see rendered output
+- **User presence** and cursor tracking for collaborative editing
+- **LaTeX template selection** with various document types
+- **Git repository integration** for version control
+- **Live LaTeX preview** with MathJax rendering
+- **Modern, responsive UI** with Bootstrap 5
 
 ## Getting Started
 
 ### Prerequisites
 
-- A running instance of the P2P LaTeX Collaboration Server
+- A running instance of the TeXSwarm backend server
 - Modern web browser (Chrome, Firefox, Safari, Edge)
 
 ### Setup
 
-1. Ensure the server is running on the configured host and port
-2. Open `index.html` in a web browser
-3. Enter a username and click "Login"
+1. Ensure the backend server is running on the configured host and port
+2. Open `index.html` in a web browser or run the provided server:
+   ```
+   ./serve.sh
+   ```
+3. Enter your name to start collaborating
 4. Create a new document or open an existing one
 
 ### Configuration
@@ -37,37 +42,99 @@ const WS_PORT = 8081;          // WebSocket port
 
 ## Usage
 
-1. **Login**: Enter a username and click "Login"
-2. **Create Document**: Click "New Document", enter a title, and optionally provide a Git repository URL
+1. **Login**: Enter your name to start collaborating
+2. **Create Document**:
+   - Click the "+" button next to "My Documents"
+   - Choose from Blank Document, Template, or Git Repository
+   - Fill in the required information and click "Create Document"
 3. **Edit Document**: Use the editor to write LaTeX content
-4. **Save Document**: Click "Save" to synchronize with Git
-5. **Compile Document**: Click "Compile" to render the LaTeX preview
-6. **Share Document**: Click "Share" to get a shareable link and manage collaborators
+4. **Save Document**: Click "Save" to save changes
+5. **Compile**: Click "Compile" to render the LaTeX preview
+6. **Share**: Click "Share" to get a shareable link and manage collaborators
 
-## Implementation Notes
+## Connectivity Testing
 
-This frontend demo uses:
+If you're experiencing connection issues, follow these steps:
 
-- **Ace Editor** for the code editing experience
-- **Bootstrap 5** for the UI components
-- **WebSockets** for real-time communication with the server
+1. Make sure the backend server is running:
+   ```bash
+   cd /path/to/TeXSwarm
+   cargo run --bin server
+   ```
+
+2. Check connectivity with the test tool:
+   ```bash
+   cd /path/to/TeXSwarm/web
+   chmod +x serve_with_cors.sh
+   ./serve_with_cors.sh
+   ```
+
+3. Open the connection test page in your browser:
+   ```
+   http://localhost:8000/connection_test.html
+   ```
+
+4. The test page will automatically check both HTTP and WebSocket connections.
+
+### Common Issues and Solutions
+
+1. **WebSocket connection fails**:
+   - Make sure the server is running
+   - Check if the correct ports are open (8080 for HTTP, 8081 for WebSocket)
+   - Try using 127.0.0.1 instead of localhost
+   - Check for firewall or network issues
+
+2. **CORS (Cross-Origin Resource Sharing) errors**:
+   - Use the provided `serve_with_cors.sh` script which enables CORS
+   - Ensure both the web server and backend run on the same machine
+
+3. **Server not found errors**:
+   - Verify the host and port configurations in `script.js`
+   - Check if the server is listening on the correct interface (0.0.0.0 vs 127.0.0.1)
+
+4. **Authentication errors**:
+   - Clear your browser cache and reload the page
+   - Check for any session-related issues in the browser console
+
+## Templates
+
+The following LaTeX templates are available:
+
+1. **Article** - For shorter academic papers, articles, or assignments
+2. **Report** - For longer documents with chapters
+3. **Book** - For full books with frontmatter, mainmatter, and backmatter
+4. **Letter** - For formal correspondence
+5. **Presentation** - For creating Beamer presentations
+
+## Implementation Details
+
+This frontend uses:
+
+- **Ace Editor** for a powerful LaTeX editing experience
+- **Bootstrap 5** for responsive UI components
+- **WebSockets** for real-time collaboration
+- **MathJax** for LaTeX rendering
+- **Bootstrap Icons** for a beautiful icon set
 - **Fetch API** for HTTP requests
 
-## Limitations
+## Recent Improvements
 
-This is a simplified demo and has some limitations:
+- Complete UI redesign with a modern, responsive interface
+- Added modal login flow
+- Enhanced document creation with templates
+- Added MathJax for better formula rendering
+- Improved user presence and collaboration features
+- Added document templates for various LaTeX document types
+- Fixed network implementation issues for better real-time collaboration
 
-- The LaTeX preview is a basic HTML representation, not a full LaTeX renderer
-- User authentication is minimal (no passwords)
-- Git repository integration requires server-side configuration
-- Offline editing is not supported
+## Future Enhancements
 
-## Next Steps
+Planned improvements include:
 
-Future improvements could include:
-
-- Full LaTeX rendering using MathJax or KaTeX
-- Proper authentication and user management
-- Conflict resolution visualizations
-- File management within LaTeX projects
-- Mobile-responsive design
+- Offline editing capability
+- Full Git history visualization
+- Enhanced LaTeX syntax highlighting
+- Advanced collaboration features (comments, suggestions)
+- Notifications for document changes
+- Mobile app with the same collaboration features
+- Authentication with user accounts and secure sharing

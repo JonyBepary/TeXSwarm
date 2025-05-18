@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeXSwarm Ping Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        #serverInfo {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        #pingResult {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>TeXSwarm Server Ping Test</h1>
+
+    <div>
+        <label for="serverAddress">Server Address:</label>
+        <input type="text" id="serverAddress" value="http://localhost:8080" style="width: 250px;">
+        <button onclick="pingServer()">Ping Server</button>
+    </div>
+
+    <div id="pingResult"></div>
+
+    <div id="serverInfo">
+        <h2>Server Information</h2>
+        <div id="serverDetails">Click "Ping Server" to get server information.</div>
+    </div>
+
+    <script>
+        function pingServer() {
+            const serverAddress = document.getElementById('serverAddress').value;
+            const pingUrl = `${serverAddress}/api/ping`;
+            const resultDiv = document.getElementById('pingResult');
+            const serverDetails = document.getElementById('serverDetails');
+
+            resultDiv.innerHTML = 'Pinging server...';
+            resultDiv.className = '';
+
+            fetch(pingUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    resultDiv.innerHTML = '✅ Success! Server is responsive.';
+                    resultDiv.className = 'success';
+
+                    // Display server information
+                    serverDetails.innerHTML = `
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Server Version:</strong> ${data.server_version}</p>
+                    `;
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = `❌ Error: ${error.message}`;
+                    resultDiv.className = 'error';
+                    serverDetails.innerHTML = 'Failed to connect to the server.';
+                });
+        }
+    </script>
+</body>
+
+</html>

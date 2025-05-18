@@ -11,7 +11,7 @@ use std::{
     path::PathBuf,
 };
 use tokio::sync::RwLock;
-use uuid::Uuid;
+// use uuid::Uuid;
 
 /// A specialized test that focuses on network synchronization in various scenarios
 #[tokio::main]
@@ -246,7 +246,7 @@ async fn main() -> Result<()> {
     // Get network stats from each instance
     for (i, app) in apps.iter().enumerate() {
         let network = app.network_engine.clone();
-        let stats = {
+        let _stats = {
             let net = network.read().await;
             println!("Instance {} network stats:", i + 1);
             println!("  Peer count: {}", net.get_connected_peer_count().await?);

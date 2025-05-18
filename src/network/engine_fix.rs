@@ -19,7 +19,9 @@ use crate::utils::errors::AppError;
 #[derive(Debug)]
 pub struct NetworkEngine {
     service: Option<NetworkService>,
+    #[allow(dead_code)]
     peer_registry: Arc<RwLock<PeerRegistry>>,
+    #[allow(dead_code)]
     crdt_engine: Arc<RwLock<CrdtEngine>>,
     config: NetworkConfig,
 

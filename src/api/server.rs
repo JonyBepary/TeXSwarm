@@ -42,10 +42,12 @@ impl ApiServer {
 
     pub async fn start(&self) -> Result<()> {
         info!("Starting HTTP API server...");
+        info!("Binding HTTP API to {}:{}", self.config.server.api_host, self.config.server.api_port);
         self.http_api.start(&self.config).await?;
         info!("HTTP API server started successfully on {}:{}", self.config.server.api_host, self.config.server.api_port);
 
         info!("Starting WebSocket server...");
+        info!("Binding WebSocket to {}:{}", self.config.server.ws_host, self.config.server.ws_port);
         self.websocket_server.start(&self.config).await?;
         info!("WebSocket server started successfully on {}:{}", self.config.server.ws_host, self.config.server.ws_port);
 

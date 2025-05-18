@@ -55,6 +55,7 @@ pub struct RealNetworkService {
     /// Subscribed topics
     subscribed_topics: Arc<Mutex<HashSet<String>>>,
     /// Sender for network events
+    #[allow(dead_code)]
     event_sender: mpsc::Sender<NetworkEvent>,
     /// Mapping of request IDs to string IDs for tracking responses
     request_ids: Arc<Mutex<HashMap<request_response_mod::RequestId, String>>>,

@@ -13,6 +13,7 @@
    - WebSocket heartbeat detection
    - Automatic reconnection attempts
    - Proper error handling
+   - Improved WebSocket session management
 
 3. Created server script for testing the application locally
 
@@ -23,6 +24,12 @@
    - Document saving
    - Document compilation
    - Document sharing
+
+5. Fixed WebSocket session handling issues:
+   - Better handling of reconnections
+   - Improved authentication feedback
+   - Fixed "Session already exists" errors
+   - Documented the changes in `docs/websocket_session_fixes.md`
 
 ## How to Use
 
@@ -55,6 +62,7 @@ You can test the web application by:
 2. Creating and editing documents
 3. Testing the offline/online functionality by stopping/starting the backend server
 4. Checking if WebSocket reconnection works properly
+5. Refreshing the page to test session management
 
 ## Next Steps
 

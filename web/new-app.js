@@ -465,6 +465,15 @@ function handlePresenceUpdate(payload) {
  * Handle error message from server
  */
 function handleError(payload) {
+    // Check if this is actually a success message disguised as an error
+    // This happens with our authentication success message
+    if (payload.code === "auth_success") {
+        console.log('Authentication success:', payload.message);
+        // Request document list after successful authentication
+        requestDocumentList();
+        return;
+    }
+
     showToast(`Error: ${payload.message}`, 'error');
 }
 
@@ -638,8 +647,7 @@ function toggleEditingControls(enabled) {
 function requestDocumentList() {
     if (isWebSocketConnected() && currentUser) {
         const message = {
-            type: 'ListDocuments',
-            payload: {}
+            type: 'ListDocuments'
         };
 
         websocket.send(JSON.stringify(message));

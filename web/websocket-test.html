@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset=<div>
+    <h2>Test Messages</h2>
+    <button id="list-documents-btn" class="test-button">Send ListDocuments</button>
+    <button id="authentication-btn" class="test-button">Send Authentication</button>
+    <button id="document-operation-btn" class="test-button">Send Document Operation</button>
+    </div>
+    ">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeXSwarm WebSocket Protocol Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .info {
+            background-color: #e3f2fd;
+        }
+
+        .success {
+            background-color: #e8f5e9;
+        }
+
+        .error {
+            background-color: #ffebee;
+        }
+
+        .test-button {
+            margin: 5px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #1e88e5;
+            color: white;
+            cursor: pointer;
+        }
+
+        .test-button:hover {
+            background-color: #1976d2;
+        }
+
+        #log {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>TeXSwarm WebSocket Protocol Test</h1>
+
+    <div>
+        <h2>WebSocket Connection</h2>
+        <p>Status: <span id="status">Disconnected</span></p>
+        <button id="connect-btn" class="test-button">Connect</button>
+        <button id="disconnect-btn" class="test-button" disabled>Disconnect</button>
+    </div>
+
+    <div>
+        <h2>Test Messages</h2>
+        <button id="list-documents-btn" class="test-button" disabled>Send ListDocuments</button>
+        <button id="authentication-btn" class="test-button" disabled>Send Authentication</button>
+        <button id="create-document-btn" class="test-button" disabled>Create Document</button>
+        <button id="open-document-btn" class="test-button" disabled>Open Document</button>
+        <button id="document-operation-btn" class="test-button" disabled>Send Document Operation</button>
+    </div>
+
+    <div>
+        <h2>Log</h2>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        // Configuration
+        const WS_HOST = window.location.hostname || 'localhost';
+        const WS_PORT = 8081;
+        const WS_URL = `ws://${WS_HOST}:${WS_PORT}/ws`;
+
+        // State
+        let websocket = null;
+        let lastDocumentId = null; // Store the last document ID
+
+        // DOM elements
+        const statusEl = document.getElementById('status');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const listDocumentsBtn = document.getElementById('list-documents-btn');
+        const authenticationBtn = document.getElementById('authentication-btn');
+        const logEl = document.getElementById('log');
+
+        // Logging function
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Connect to WebSocket
+        function connect() {
+            log('Connecting to WebSocket server...');
+
+            try {
+                websocket = new WebSocket(WS_URL);
+
+                websocket.onopen = () => {
+                    log('WebSocket connection established', 'success');
+                    statusEl.textContent = 'Connected';
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    listDocumentsBtn.disabled = false;
+                    authenticationBtn.disabled = false;
+                    document.getElementById('create-document-btn').disabled = false;
+                    document.getElementById('open-document-btn').disabled = false;
+                    document.getElementById('document-operation-btn').disabled = false;
+                };
+
+                websocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(`Received: ${JSON.stringify(data)}`, 'success');
+
+                        // Check for document-related responses to save document IDs
+                        if (data.type === 'DocumentUpdate' && data.payload && data.payload.document_id) {
+                            lastDocumentId = data.payload.document_id;
+                            log(`Saved document ID: ${lastDocumentId}`, 'info');
+                        } else if (data.type === 'DocumentList' && data.payload && data.payload.documents && data.payload.documents.length > 0) {
+                            // Save the ID of the first document in the list
+                            lastDocumentId = data.payload.documents[0].id;
+                            log(`Saved document ID from list: ${lastDocumentId}`, 'info');
+                        }
+                    } catch (e) {
+                        log(`Received non-JSON message: ${event.data}`);
+                    }
+                };
+
+                websocket.onclose = () => {
+                    log('WebSocket connection closed');
+                    statusEl.textContent = 'Disconnected';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    listDocumentsBtn.disabled = true;
+                    authenticationBtn.disabled = true;
+                    document.getElementById('create-document-btn').disabled = true;
+                    document.getElementById('open-document-btn').disabled = true;
+                    document.getElementById('document-operation-btn').disabled = true;
+                    websocket = null;
+                };
+
+                websocket.onerror = (error) => {
+                    log(`WebSocket error: ${error}`, 'error');
+                };
+
+            } catch (error) {
+                log(`Connection error: ${error}`, 'error');
+            }
+        }
+
+        // Disconnect from WebSocket
+        function disconnect() {
+            if (websocket) {
+                log('Disconnecting from WebSocket server...');
+                websocket.close();
+            }
+        }
+
+        // Send ListDocuments message
+        function sendListDocuments() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'ListDocuments'
+                };
+
+                log(`Sending: ${JSON.stringify(message)}`);
+                websocket.send(JSON.stringify(message));
+            } else {
+                log('WebSocket not connected', 'error');
+            }
+        }
+
+        // Send Authentication message
+        function sendAuthentication() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const userId = 'test-user-' + Math.floor(Math.random() * 10000);
+
+                const message = {
+                    type: 'Authentication',
+                    payload: {
+                        user_id: userId,
+                        token: null
+                    }
+                };
+
+                log(`Sending: ${JSON.stringify(message)}`);
+                websocket.send(JSON.stringify(message));
+            } else {
+                log('WebSocket not connected', 'error');
+            }
+        }
+
+        // Send Document Operation message
+        function sendDocumentOperation() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const docId = prompt('Enter a document ID for testing (UUID format):', lastDocumentId || '965ac965-a422-43ff-9862-49aaf0cbff4c');
+                if (!docId) return;
+
+                // Save this document ID for future use
+                lastDocumentId = docId;
+
+                const message = {
+                    type: 'DocumentOperation',
+                    payload: {
+                        operation: {
+                            type: 'Replace',
+                            document_id: docId,
+                            range: { start: 0, end: 10 },
+                            content: 'Hello TeXSwarm!'
+                        }
+                    }
+                };
+
+                log(`Sending: ${JSON.stringify(message)}`);
+                websocket.send(JSON.stringify(message));
+            } else {
+                log('WebSocket not connected', 'error');
+            }
+        }
+
+        // Send Create Document message
+        function createDocument() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const docTitle = prompt('Enter a title for the new document:', 'Test Document');
+                if (!docTitle) return;
+
+                const message = {
+                    type: 'CreateDocument',
+                    payload: {
+                        title: docTitle,
+                        repository_url: null
+                    }
+                };
+
+                log(`Sending: ${JSON.stringify(message)}`);
+                websocket.send(JSON.stringify(message));
+            } else {
+                log('WebSocket not connected', 'error');
+            }
+        }
+
+        // Open Document message
+        function openDocument() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const docId = prompt('Enter a document ID to open:', lastDocumentId || '');
+                if (!docId) return;
+
+                // Save this document ID for future use
+                lastDocumentId = docId;
+
+                const message = {
+                    type: 'OpenDocument',
+                    payload: {
+                        document_id: docId
+                    }
+                };
+
+                log(`Sending: ${JSON.stringify(message)}`);
+                websocket.send(JSON.stringify(message));
+            } else {
+                log('WebSocket not connected', 'error');
+            }
+        }
+
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        listDocumentsBtn.addEventListener('click', sendListDocuments);
+        authenticationBtn.addEventListener('click', sendAuthentication);
+        document.getElementById('create-document-btn').addEventListener('click', createDocument);
+        document.getElementById('open-document-btn').addEventListener('click', openDocument);
+        document.getElementById('document-operation-btn').addEventListener('click', sendDocumentOperation);
+
+        // Include our WebSocket fixes
+        // Load the WebSocket protocol fix script
+        const wsFixScript = document.createElement('script');
+        wsFixScript.src = 'websocket-fix.js';
+        document.body.appendChild(wsFixScript);
+
+        // Load the document operation fix script
+        const docOpFixScript = document.createElement('script');
+        docOpFixScript.src = 'document-operation-fix.js';
+        document.body.appendChild(docOpFixScript);
+    </script>
+</body>
+
+</html>

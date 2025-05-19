@@ -66,7 +66,7 @@ If you're experiencing connection issues, follow these steps:
 1. Make sure the backend server is running:
    ```bash
    cd /path/to/TeXSwarm
-   cargo run --bin server
+   cargo run --bin p2p-latex-collab-server
    ```
 
 2. Check connectivity with the test tool:

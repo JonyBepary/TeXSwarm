@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeXSwarm WebSocket Protocol Client Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .info {
+            background-color: #e3f2fd;
+        }
+
+        .success {
+            background-color: #e8f5e9;
+        }
+
+        .error {
+            background-color: #ffebee;
+        }
+
+        .warning {
+            background-color: #fff8e1;
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #1e88e5;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #1976d2;
+        }
+
+        button:disabled {
+            background-color: #90caf9;
+            cursor: not-allowed;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .status-connecting {
+            background-color: #ffa726;
+        }
+
+        .status-connected {
+            background-color: #66bb6a;
+        }
+
+        .status-disconnected {
+            background-color: #ef5350;
+        }
+
+        .status-error {
+            background-color: #e53935;
+        }
+
+        .status-timeout {
+            background-color: #ff9800;
+        }
+
+        #log {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>TeXSwarm WebSocket Protocol Client Example</h1>
+
+    <div class="panel">
+        <h2>Connection Status</h2>
+        <p>
+            <span id="status-indicator" class="status-indicator status-disconnected"></span>
+            <span id="status-text">Disconnected</span>
+        </p>
+        <div class="button-group">
+            <button id="connect-btn">Connect</button>
+            <button id="disconnect-btn" disabled>Disconnect</button>
+            <button id="auth-btn" disabled>Authenticate</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Document Actions</h2>
+        <div class="button-group">
+            <button id="list-documents-btn" disabled>List Documents</button>
+            <button id="create-document-btn" disabled>Create Document</button>
+            <button id="open-document-btn" disabled>Open Document</button>
+            <button id="update-document-btn" disabled>Update Document</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Document Operations</h2>
+        <div class="button-group">
+            <button id="insert-op-btn" disabled>Insert Operation</button>
+            <button id="delete-op-btn" disabled>Delete Operation</button>
+            <button id="replace-op-btn" disabled>Replace Operation</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Log</h2>
+        <div id="log"></div>
+    </div>
+
+    <!-- Load the WebSocket Protocol Client -->
+    <script src="websocket-protocol.js"></script>
+
+    <script>
+        // Configuration
+        const WS_HOST = window.location.hostname || 'localhost';
+        const WS_PORT = 8081;
+        const WS_URL = `ws://${WS_HOST}:${WS_PORT}/ws`;
+
+        // DOM elements
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const authBtn = document.getElementById('auth-btn');
+        const listDocumentsBtn = document.getElementById('list-documents-btn');
+        const createDocumentBtn = document.getElementById('create-document-btn');
+        const openDocumentBtn = document.getElementById('open-document-btn');
+        const updateDocumentBtn = document.getElementById('update-document-btn');
+        const insertOpBtn = document.getElementById('insert-op-btn');
+        const deleteOpBtn = document.getElementById('delete-op-btn');
+        const replaceOpBtn = document.getElementById('replace-op-btn');
+        const logEl = document.getElementById('log');
+
+        // State
+        let wsClient = null;
+        let userId = null;
+        let currentDocumentId = null;
+
+        // Logging function
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `${timestamp} - ${message}`;
+
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Update the status display
+        function updateStatus(status) {
+            statusIndicator.className = `status-indicator status-${status}`;
+
+            switch (status) {
+                case 'connecting':
+                    statusText.textContent = 'Connecting...';
+                    break;
+                case 'connected':
+                    statusText.textContent = 'Connected';
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    authBtn.disabled = false;
+                    break;
+                case 'disconnected':
+                    statusText.textContent = 'Disconnected';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    authBtn.disabled = true;
+                    listDocumentsBtn.disabled = true;
+                    createDocumentBtn.disabled = true;
+                    openDocumentBtn.disabled = true;
+                    updateDocumentBtn.disabled = true;
+                    insertOpBtn.disabled = true;
+                    deleteOpBtn.disabled = true;
+                    replaceOpBtn.disabled = true;
+                    break;
+                case 'error':
+                    statusText.textContent = 'Connection Error';
+                    break;
+                case 'timeout':
+                    statusText.textContent = 'Connection Timeout';
+                    break;
+                case 'failed':
+                    statusText.textContent = 'Connection Failed';
+                    break;
+            }
+        }
+
+        // Connect to WebSocket server
+        function connect() {
+            if (wsClient) {
+                wsClient.disconnect();
+            }
+
+            log('Connecting to WebSocket server...');
+
+            wsClient = new TeXSwarmWebSocketClient(WS_URL, {
+                onOpen: () => {
+                    log('WebSocket connection established', 'success');
+                },
+                onMessage: (message) => {
+                    log(`Received: ${JSON.stringify(message)}`, 'success');
+
+                    if (message.type === 'DocumentList' && message.payload && message.payload.documents) {
+                        const documents = message.payload.documents;
+                        if (documents.length > 0) {
+                            currentDocumentId = documents[0].id;
+                            log(`Found document: ${documents[0].title} (${currentDocumentId})`, 'info');
+                            openDocumentBtn.disabled = false;
+                            updateDocumentBtn.disabled = false;
+                            insertOpBtn.disabled = false;
+                            deleteOpBtn.disabled = false;
+                            replaceOpBtn.disabled = false;
+                        }
+                    } else if (message.type === 'DocumentUpdate' && message.payload) {
+                        currentDocumentId = message.payload.document_id;
+                        updateDocumentBtn.disabled = false;
+                        insertOpBtn.disabled = false;
+                        deleteOpBtn.disabled = false;
+                        replaceOpBtn.disabled = false;
+                    }
+                },
+                onClose: () => {
+                    log('WebSocket connection closed');
+                },
+                onError: (error) => {
+                    log(`WebSocket error: ${error}`, 'error');
+                },
+                onStatusChange: (status) => {
+                    updateStatus(status);
+                }
+            });
+
+            wsClient.connect();
+        }
+
+        // Disconnect from WebSocket server
+        function disconnect() {
+            if (wsClient) {
+                log('Disconnecting from WebSocket server...');
+                wsClient.disconnect();
+                wsClient = null;
+            }
+        }
+
+        // Authenticate
+        function authenticate() {
+            userId = 'user-' + Math.floor(Math.random() * 10000);
+            log(`Authenticating as ${userId}...`);
+
+            wsClient.authenticate(userId);
+
+            // Enable document actions after authentication
+            listDocumentsBtn.disabled = false;
+            createDocumentBtn.disabled = false;
+        }
+
+        // List documents
+        function listDocuments() {
+            log('Requesting document list...');
+            wsClient.listDocuments();
+        }
+
+        // Create document
+        function createDocument() {
+            const title = prompt('Enter document title:', 'New Document');
+            if (!title) return;
+
+            log(`Creating document "${title}"...`);
+            wsClient.createDocument(title);
+        }
+
+        // Open document
+        function openDocument() {
+            const docId = prompt('Enter document ID:', currentDocumentId || '');
+            if (!docId) return;
+
+            log(`Opening document ${docId}...`);
+            currentDocumentId = docId;
+            wsClient.openDocument(docId);
+        }
+
+        // Update document
+        function updateDocument() {
+            if (!currentDocumentId) {
+                log('No document selected', 'warning');
+                return;
+            }
+
+            const content = prompt('Enter new document content:', 'Hello, TeXSwarm!');
+            if (content === null) return;
+
+            log(`Updating document ${currentDocumentId}...`);
+            wsClient.replaceDocumentContent(currentDocumentId, content);
+        }
+
+        // Insert operation
+        function insertOperation() {
+            if (!currentDocumentId) {
+                log('No document selected', 'warning');
+                return;
+            }
+
+            const position = parseInt(prompt('Enter position to insert at:', '0'));
+            if (isNaN(position)) return;
+
+            const content = prompt('Enter content to insert:', 'Inserted text');
+            if (content === null) return;
+
+            log(`Sending Insert operation to document ${currentDocumentId}...`);
+            wsClient.sendDocumentOperation(currentDocumentId, 'Insert', {
+                position: position,
+                content: content
+            });
+        }
+
+        // Delete operation
+        function deleteOperation() {
+            if (!currentDocumentId) {
+                log('No document selected', 'warning');
+                return;
+            }
+
+            const start = parseInt(prompt('Enter start position to delete from:', '0'));
+            if (isNaN(start)) return;
+
+            const end = parseInt(prompt('Enter end position to delete to:', '10'));
+            if (isNaN(end)) return;
+
+            log(`Sending Delete operation to document ${currentDocumentId}...`);
+            wsClient.sendDocumentOperation(currentDocumentId, 'Delete', {
+                range: { start: start, end: end }
+            });
+        }
+
+        // Replace operation
+        function replaceOperation() {
+            if (!currentDocumentId) {
+                log('No document selected', 'warning');
+                return;
+            }
+
+            const start = parseInt(prompt('Enter start position to replace from:', '0'));
+            if (isNaN(start)) return;
+
+            const end = parseInt(prompt('Enter end position to replace to:', '10'));
+            if (isNaN(end)) return;
+
+            const content = prompt('Enter replacement content:', 'Replacement text');
+            if (content === null) return;
+
+            log(`Sending Replace operation to document ${currentDocumentId}...`);
+            wsClient.sendDocumentOperation(currentDocumentId, 'Replace', {
+                range: { start: start, end: end },
+                content: content
+            });
+        }
+
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        authBtn.addEventListener('click', authenticate);
+        listDocumentsBtn.addEventListener('click', listDocuments);
+        createDocumentBtn.addEventListener('click', createDocument);
+        openDocumentBtn.addEventListener('click', openDocument);
+        updateDocumentBtn.addEventListener('click', updateDocument);
+        insertOpBtn.addEventListener('click', insertOperation);
+        deleteOpBtn.addEventListener('click', deleteOperation);
+        replaceOpBtn.addEventListener('click', replaceOperation);
+
+        // Initial log message
+        log('WebSocket Protocol Client Example loaded', 'info');
+    </script>
+</body>
+
+</html>

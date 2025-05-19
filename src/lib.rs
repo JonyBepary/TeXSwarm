@@ -3,6 +3,7 @@ pub mod crdt;
 pub mod git;
 pub mod network;
 pub mod protocol;
+pub mod storage;
 pub mod utils;
 #[cfg(test)]
 pub mod tests;
@@ -15,6 +16,7 @@ pub struct P2PLatexCollab {
     pub network_engine: Arc<RwLock<network::engine::NetworkEngine>>,
     pub git_manager: Arc<RwLock<git::manager::GitManager>>,
     pub api_server: Arc<api::server::ApiServer>,
+    pub document_persistence: Arc<storage::document_persistence_service::DocumentPersistenceService>,
 }
 
 impl P2PLatexCollab {
@@ -29,11 +31,24 @@ impl P2PLatexCollab {
             Arc::clone(&git_manager),
         )?);
 
+        // Initialize the document persistence service with auto-save every 5 minutes
+        let document_persistence = Arc::new(storage::document_persistence_service::DocumentPersistenceService::new(
+            Arc::clone(&crdt_engine),
+            Arc::clone(&git_manager),
+            300, // 5 minutes in seconds
+        ));
+
+        // Add the persistence service to the API server
+        if let Ok(mut server) = Arc::get_mut(&api_server) {
+            server.set_persistence_service(Arc::clone(&document_persistence));
+        }
+
         Ok(Self {
             crdt_engine,
             network_engine,
             git_manager,
             api_server,
+            document_persistence,
         })
     }
 
@@ -46,6 +61,12 @@ impl P2PLatexCollab {
 
         // Start the API server
         self.api_server.start().await?;
+
+        // Start the document persistence service
+        let persistence_service = Arc::clone(&self.document_persistence);
+        tokio::spawn(async move {
+            persistence_service.clone().start().await;
+        });
 
         Ok(())
     }

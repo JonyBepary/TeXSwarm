@@ -95,7 +95,12 @@ impl WebSocketServer {
             ApiMessage::Authentication { user_id, token: _ } => {
                 // In a real system, we would validate the token
                 self.register_session(session_id, user_id.clone()).await?;
-                Ok(None)
+
+                // Return a positive authentication response
+                Ok(Some(ApiMessage::Error {
+                    code: "auth_success".to_string(),
+                    message: format!("Authentication successful for user {}", user_id),
+                }))
             },
 
             ApiMessage::DocumentOperation { operation } => {
@@ -238,7 +243,17 @@ impl WebSocketServer {
 
         // Check if this session already exists
         if sessions.contains_key(session_id) {
-            return Err(AppError::ApiError("Session already exists".to_string()).into());
+            // Instead of returning an error, update the existing session if the user_id is different
+            if let Some(session) = sessions.get_mut(session_id) {
+                if session.user_id != user_id {
+                    // Update user ID if it changed
+                    session.user_id = user_id;
+                    tracing::info!("Updated session {} with new user ID", session_id);
+                } else {
+                    tracing::info!("Session {} already exists for user {}", session_id, user_id);
+                }
+            }
+            return Ok(());
         }
 
         // Create a channel for sending messages to the client
@@ -253,6 +268,7 @@ impl WebSocketServer {
 
         // Add the session
         sessions.insert(session_id.to_string(), session);
+        tracing::info!("Registered new session: {}", session_id);
 
         Ok(())
     }

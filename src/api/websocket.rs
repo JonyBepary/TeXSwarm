@@ -13,6 +13,7 @@ use warp::ws::Message as WarpMessage;
 use crate::api::protocol::ApiMessage;
 use crate::crdt::engine::CrdtEngine;
 use crate::crdt::operations::DocumentOperation;
+use crate::crdt::document_branch_manager::DocumentBranchManager;
 use crate::utils::errors::AppError;
 
 /// User client session information
@@ -33,6 +34,8 @@ pub struct WebSocketServer {
     crdt_engine: Arc<RwLock<CrdtEngine>>,
     /// Active client sessions
     sessions: Arc<RwLock<HashMap<String, ClientSession>>>,
+    /// Document branch manager for handling missing document branches
+    document_branch_manager: Arc<DocumentBranchManager>,
 }
 
 impl WebSocketServer {
@@ -40,9 +43,12 @@ impl WebSocketServer {
     pub fn new(
         crdt_engine: Arc<RwLock<CrdtEngine>>,
     ) -> Self {
+        let document_branch_manager = Arc::new(DocumentBranchManager::new(crdt_engine.clone()));
+
         Self {
             crdt_engine,
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            document_branch_manager,
         }
     }
 
@@ -221,20 +227,44 @@ impl WebSocketServer {
 
     /// Apply a document operation to the CRDT engine
     pub async fn apply_operation(&self, operation: DocumentOperation) -> Result<()> {
-        // Get the CRDT engine
-        let engine = self.crdt_engine.read().await;
-
-        // Extract the document ID
-        let document_id = match &operation {
-            DocumentOperation::Insert { document_id, .. } => document_id,
-            DocumentOperation::Delete { document_id, .. } => document_id,
-            DocumentOperation::Replace { document_id, .. } => document_id,
+        // Extract the document ID and user ID
+        let (document_id, user_id) = match &operation {
+            DocumentOperation::Insert { document_id, user_id, .. } => (document_id, user_id),
+            DocumentOperation::Delete { document_id, user_id, .. } => (document_id, user_id),
+            DocumentOperation::Replace { document_id, user_id, .. } => (document_id, user_id),
         };
 
-        // Apply the operation to the CRDT - don't need to recreate the operation
-        engine.apply_local_operation(document_id, operation.clone()).await?;
+        // Create a title for potential document creation
+        let title = format!("Auto-created Document {}", document_id.to_string()[..8].to_string());
 
-        Ok(())
+        // Try to apply the operation
+        let engine = self.crdt_engine.read().await;
+        match engine.apply_local_operation(document_id, operation.clone()).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                // Check if this is a "Document branch not found" error
+                let error_msg = e.to_string();
+                if error_msg.contains("Document branch not found") {
+                    // Drop read lock on engine before acquiring write lock
+                    drop(engine);
+
+                    // Create the missing document branch
+                    if let Ok(created) = self.document_branch_manager.ensure_document_exists(document_id, &title).await {
+                        if created {
+                            tracing::info!("Created missing document branch for {}", document_id);
+
+                            // Try the operation again with the newly created document
+                            let engine = self.crdt_engine.read().await;
+                            engine.apply_local_operation(document_id, operation).await?;
+                            return Ok(());
+                        }
+                    }
+                }
+
+                // If we got here, either it wasn't a document branch error or we failed to fix it
+                Err(e)
+            }
+        }
     }
 
     /// Register a new client session

@@ -464,6 +464,60 @@ If Git synchronization is not working:
 
 1. Check the Git credentials in the configuration
 2. Ensure the repository exists and is accessible
+
+#### WebSocket Protocol Compatibility Issues
+
+If you encounter WebSocket message parsing errors like one of these:
+
+```
+Failed to parse message: invalid type: map, expected unit variant ApiMessage::ListDocuments
+```
+```
+Failed to parse message: unknown variant `user_id`, expected one of `Insert`, `Delete`, `Replace`
+```
+```
+Error: CRDT error: Document branch not found: [document-id]
+```
+
+These are known issues where the JavaScript client is sending messages in a format different from what the Rust server expects, or trying to operate on documents that don't exist yet.
+
+### Solutions:
+
+#### Option 1: Use the Permanent WebSocket Protocol Client (Recommended)
+
+1. Include the WebSocket protocol client in your HTML:
+   ```html
+   <script src="websocket-protocol.js"></script>
+   ```
+
+2. Use the client API instead of raw WebSocket:
+   ```javascript
+   const wsClient = new TeXSwarmWebSocketClient(WS_URL, {
+     onMessage: handleMessage,
+     onStatusChange: updateStatus
+   });
+
+   // Connect and send properly formatted messages
+   wsClient.connect();
+   wsClient.authenticate(userId);
+   wsClient.listDocuments();
+   wsClient.replaceDocumentContent(docId, content);
+   ```
+
+3. See [WebSocket Protocol Permanent Fix](docs/websocket_protocol_permanent_fix.md) for integration details and [WebSocket Protocol Example](web/websocket-protocol-example.html) for a complete example
+
+#### Option 2: Use the Protocol Fix Scripts (Legacy)
+
+1. Include the fix scripts in your HTML after the main application script:
+   - `websocket-fix.js` - Fixes unit variant messages (like ListDocuments)
+   - `document-operation-fix.js` - Fixes document operation formats and provides automatic document creation
+
+2. The fix scripts provide these features:
+   - Correct message formatting for different message types
+   - Automatic document creation when operations are attempted on non-existent documents
+   - Intelligent message retry mechanism to recover from errors
+
+3. See [WebSocket Protocol Fixes](docs/websocket_protocol_fix.md) for detailed explanation
 3. Verify that the GitHub token has the correct permissions
 
 ## License

@@ -51,9 +51,9 @@ impl Default for Config {
         Self {
             server: ServerConfig {
                 api_host: "0.0.0.0".to_string(),
-                api_port: 8080,
+                api_port: 8090,
                 ws_host: "0.0.0.0".to_string(),
-                ws_port: 8081,
+                ws_port: 8091,
             },
             network: NetworkConfig {
                 peer_id_seed: None,
@@ -111,10 +111,17 @@ impl Config {
     }
 
     fn config_path() -> PathBuf {
+        // Always prefer local config.json first
+        let local_config = PathBuf::from("./config.json");
+        if local_config.exists() {
+            return local_config;
+        }
+
+        // Fall back to system config directory
         if let Some(proj_dirs) = directories::ProjectDirs::from("org", "p2p-latex", "p2p-latex-collab") {
             proj_dirs.config_dir().join("config.json")
         } else {
-            PathBuf::from("./config.json")
+            local_config
         }
     }
 }

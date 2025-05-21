@@ -1,8 +1,39 @@
 // Configuration
 const API_HOST = window.location.hostname || 'localhost';
-const API_PORT = 8090;
+let API_PORT = 8090; // Default, will be overridden if config.json is available
 const WS_HOST = window.location.hostname || 'localhost';
-const WS_PORT = 8091;
+let WS_PORT = 8091; // Default, will be overridden if config.json is available
+
+// Function to load configuration from config.json
+async function loadConfig() {
+    try {
+        const response = await fetch('../config.json');
+        if (response.ok) {
+            const config = await response.json();
+            if (config && config.server) {
+                API_PORT = config.server.api_port || API_PORT;
+                WS_PORT = config.server.ws_port || WS_PORT;
+                console.log(`Configuration loaded: API Port=${API_PORT}, WS Port=${WS_PORT}`);
+            }
+        } else {
+            console.warn('Failed to load config.json, using default ports');
+        }
+    } catch (error) {
+        console.error('Error loading config:', error);
+    }
+
+    // Update any elements that need the port info
+    updatePortDisplay();
+}
+
+// Function to update any elements that display port information
+function updatePortDisplay() {
+    // If we have elements showing connection info, update them here
+    const connectionInfoEl = document.getElementById('connection-info');
+    if (connectionInfoEl) {
+        connectionInfoEl.textContent = `Connected to: API on port ${API_PORT}, WebSocket on port ${WS_PORT}`;
+    }
+}
 
 // State
 let currentUser = null;
@@ -16,7 +47,10 @@ let connected = false;
 let loginModal = null;
 
 // Initialize on document load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load configuration from config.json
+    await loadConfig();
+
     // Initialize Editor
     editor = ace.edit('editor');
     editor.setTheme('ace/theme/monokai');

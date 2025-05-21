@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeXSwarm Document Branch Tester</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+
+        .btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            background-color: #2980b9;
+        }
+
+        .success {
+            color: #27ae60;
+        }
+
+        .error {
+            color: #e74c3c;
+        }
+
+        .warning {
+            color: #f39c12;
+        }
+
+        .info {
+            color: #3498db;
+        }
+
+        .output {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+
+        .form-control {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 5px;
+            width: 200px;
+        }
+
+        .login-form {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        #login-status.logged-in {
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        .test-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .status-online {
+            background-color: #27ae60;
+        }
+
+        .status-offline {
+            background-color: #e74c3c;
+        }
+
+        .status-connecting {
+            background-color: #f39c12;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>TeXSwarm Document Branch Tester</h1>
+
+        <!-- Login Section -->
+        <div class="test-section" id="login-section">
+            <h2>Login</h2>
+            <div class="login-form">
+                <input type="text" id="username-input" placeholder="Enter your username" class="form-control">
+                <button id="login-btn" class="btn">Login</button>
+                <button id="logout-btn" class="btn" style="display: none;">Logout</button>
+                <div>
+                    <span>Login Status: </span>
+                    <span id="login-status">Not logged in</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Connection Status</h2>
+            <div>
+                <span>Server Status: </span>
+                <span id="status-indicator"></span>
+                <span id="status-text">Checking...</span>
+            </div>
+            <div>
+                <span>API: <span id="api-status">Checking...</span></span> |
+                <span>WebSocket: <span id="ws-status">Checking...</span></span>
+            </div>
+            <button id="connect-btn" class="btn">Connect to Server</button>
+        </div>
+
+        <div class="test-section">
+            <h2>Document Branch Tests</h2>
+            <div>
+                <button id="create-doc-btn" class="btn">1. Create Test Document</button>
+                <button id="simulate-error-btn" class="btn">2. Simulate Branch Error</button>
+                <button id="fix-branch-btn" class="btn">3. Fix Document Branch</button>
+                <button id="run-all-tests-btn" class="btn">Run Complete Test</button>
+            </div>
+            <div>
+                <p>Document ID: <span id="current-doc-id">None</span></p>
+                <p>Branch Status: <span id="branch-status">Unknown</span></p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test Output</h2>
+            <div class="output" id="output"></div>
+            <button id="clear-output-btn" class="btn">Clear Output</button>
+        </div>
+    </div>
+
+    <!-- Load TeXSwarm scripts -->
+    <script src="new-app.js"></script>
+    <script src="websocket-fix.js"></script>
+    <script src="document-operation-fix.js"></script>
+    <script src="document-creation-enhancement.js"></script>
+    <script src="test_document_branches.js"></script>
+    <script src="branch_tester_helper.js"></script>
+    <script src="branch_tester_message_handler.js"></script>
+
+    <script>
+        // Log output to the output area
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+        const originalConsoleInfo = console.info;
+
+        function appendToOutput(message, type = 'log') {
+            const output = document.getElementById('output');
+            const line = document.createElement('div');
+            line.textContent = message;
+
+            if (type === 'error') line.className = 'error';
+            else if (type === 'warn') line.className = 'warning';
+            else if (type === 'info') line.className = 'info';
+            else line.className = 'success';
+
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        console.log = function () {
+            originalConsoleLog.apply(console, arguments);
+            appendToOutput(`LOG: ${Array.from(arguments).join(' ')}`);
+        };
+
+        console.error = function () {
+            originalConsoleError.apply(console, arguments);
+            appendToOutput(`ERROR: ${Array.from(arguments).join(' ')}`, 'error');
+        };
+
+        console.warn = function () {
+            originalConsoleWarn.apply(console, arguments);
+            appendToOutput(`WARN: ${Array.from(arguments).join(' ')}`, 'warn');
+        };
+
+        console.info = function () {
+            originalConsoleInfo.apply(console, arguments);
+            appendToOutput(`INFO: ${Array.from(arguments).join(' ')}`, 'info');
+        };        // Globals
+        let currentDocumentId = null;
+        let currentUser = null;
+
+        // Update UI functions
+        function updateConnectionStatus(status) {
+            const indicator = document.getElementById('status-indicator');
+            const statusText = document.getElementById('status-text');
+
+            indicator.className = '';
+            if (status === 'online') {
+                indicator.classList.add('status-online');
+                statusText.textContent = 'Connected';
+            } else if (status === 'offline') {
+                indicator.classList.add('status-offline');
+                statusText.textContent = 'Disconnected';
+            } else {
+                indicator.classList.add('status-connecting');
+                statusText.textContent = 'Connecting...';
+            }
+        }
+
+        function updateDocumentStatus(docId, status) {
+            document.getElementById('current-doc-id').textContent = docId || 'None';
+            document.getElementById('branch-status').textContent = status || 'Unknown';
+        }
+
+        // Login functions
+        function updateLoginStatus(user) {
+            const loginStatus = document.getElementById('login-status');
+            const loginBtn = document.getElementById('login-btn');
+            const logoutBtn = document.getElementById('logout-btn');
+
+            if (user) {
+                currentUser = user;
+                loginStatus.textContent = `Logged in as ${user.username} (${user.id})`;
+                loginStatus.classList.add('logged-in');
+                loginBtn.style.display = 'none';
+                logoutBtn.style.display = 'inline-block';
+
+                // Save to localStorage for persistence
+                localStorage.setItem('userId', user.id);
+                localStorage.setItem('username', user.username);
+
+                console.log(`Logged in successfully as ${user.username}`);
+            } else {
+                currentUser = null;
+                loginStatus.textContent = 'Not logged in';
+                loginStatus.classList.remove('logged-in');
+                loginBtn.style.display = 'inline-block';
+                logoutBtn.style.display = 'none';
+
+                // Clear localStorage
+                localStorage.removeItem('userId');
+                localStorage.removeItem('username');
+
+                console.log('Logged out');
+            }
+        }
+
+        async function login(username) {
+            console.log(`Attempting to login as ${username}...`);
+
+            if (!username) {
+                console.error('Username is required');
+                return;
+            }
+
+            try {
+                // Use the branchTesterLogin helper function if available
+                if (typeof branchTesterLogin === 'function') {
+                    const user = await branchTesterLogin(username);
+                    updateLoginStatus(user);
+                    return user;
+                }
+
+                // First ensure WebSocket is connected
+                if (window.websocket && window.websocket.readyState !== WebSocket.OPEN) {
+                    console.warn('WebSocket not connected. Connecting first...');
+                    await connectToWebSocket();
+                }
+
+                return new Promise((resolve, reject) => {
+                    // Create a unique ID for this user
+                    const userId = 'user-' + Math.random().toString(36).substr(2, 9);
+
+                    // Send login message via WebSocket
+                    const message = {
+                        type: 'Login',
+                        payload: {
+                            username: username,
+                            user_id: userId
+                        }
+                    };
+
+                    if (window.websocket && window.websocket.readyState === WebSocket.OPEN) {
+                        window.websocket.send(JSON.stringify(message));
+
+                        // For our test, we'll just assume success and update the UI
+                        const user = {
+                            username: username,
+                            id: userId
+                        };
+
+                        updateLoginStatus(user);
+                        resolve(user);
+                    } else {
+                        console.error('WebSocket not connected');
+                        reject(new Error('WebSocket not connected'));
+                    }
+                });
+            } catch (error) {
+                console.error('Login failed:', error);
+                throw error;
+            }
+        }
+
+        function logout() {
+            console.log('Logging out...');
+
+            // Send logout message if needed
+            if (window.websocket && window.websocket.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'Logout',
+                    payload: {}
+                };
+
+                window.websocket.send(JSON.stringify(message));
+            }
+
+            // Update UI
+            updateLoginStatus(null);
+        }
+
+        // Check if we have stored credentials and auto-login
+        function autoLogin() {
+            const userId = localStorage.getItem('userId');
+            const username = localStorage.getItem('username');
+
+            if (userId && username) {
+                console.log(`Found stored credentials for ${username}, attempting auto-login`);
+
+                // Create user object
+                const user = {
+                    username: username,
+                    id: userId
+                };
+
+                // Update UI
+                updateLoginStatus(user);
+
+                return user;
+            }
+
+            return null;
+        }
+
+        async function connectToWebSocket() {
+            console.log('Connecting to WebSocket...');
+            updateConnectionStatus('connecting');
+
+            // Get config
+            try {
+                // Use the connectWebSocket function if available (from new-app.js)
+                if (typeof connectWebSocket === 'function') {
+                    console.log('Using connectWebSocket from new-app.js');
+                    await connectWebSocket();
+                    updateConnectionStatus('online');
+
+                    // Update WebSocket status in UI
+                    if (document.getElementById('ws-status')) {
+                        document.getElementById('ws-status').textContent = 'Connected';
+                        document.getElementById('ws-status').className = 'success';
+                    }
+
+                    return true;
+                }
+                // Use checkApiConnection as fallback
+                else if (typeof checkApiConnection === 'function') {
+                    console.log('Using checkApiConnection as fallback');
+                    await checkApiConnection();
+                    updateConnectionStatus('online');
+                    return true;
+                }
+                else {
+                    console.error('No WebSocket connection function available');
+                    updateConnectionStatus('offline');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Failed to connect to WebSocket:', error);
+                updateConnectionStatus('offline');
+                return false;
+            }
+        }
+
+        // Event handlers
+        document.getElementById('connect-btn').addEventListener('click', async () => {
+            console.log('Connecting to server...');
+            updateConnectionStatus('connecting');
+
+            try {
+                // Use the helper function if available
+                if (typeof initializeConnection === 'function') {
+                    await initializeConnection();
+                    updateConnectionStatus('online');
+                    return;
+                }
+
+                // Fallback to existing functions
+                if (typeof checkApiConnection === 'function') {
+                    await checkApiConnection();
+                    console.log('Connection check completed');
+                } else if (typeof connectToWebSocket === 'function') {
+                    await connectToWebSocket();
+                } else {
+                    console.error('No connection function available');
+                    updateConnectionStatus('offline');
+                }
+            } catch (error) {
+                console.error('Connection failed:', error);
+                updateConnectionStatus('offline');
+            }
+        });
+
+        document.getElementById('create-doc-btn').addEventListener('click', async () => {
+            console.log('Creating test document...');
+
+            try {
+                if (typeof DocumentBranchTester === 'undefined') {
+                    throw new Error('DocumentBranchTester not available');
+                }
+
+                const doc = await DocumentBranchTester.createTestDocument();
+                if (doc && doc.id) {
+                    currentDocumentId = doc.id;
+                    updateDocumentStatus(doc.id, 'Created');
+                    console.log(`Document created with ID: ${doc.id}`);
+                }
+            } catch (error) {
+                console.error('Failed to create document:', error);
+            }
+        });
+
+        document.getElementById('simulate-error-btn').addEventListener('click', async () => {
+            if (!currentDocumentId) {
+                console.error('No document ID available. Create a document first.');
+                return;
+            }
+
+            console.log(`Simulating branch error for document ${currentDocumentId}...`);
+            try {
+                if (typeof DocumentBranchTester === 'undefined') {
+                    throw new Error('DocumentBranchTester not available');
+                }
+
+                const result = await DocumentBranchTester.simulateDocumentBranchError(currentDocumentId);
+                if (result) {
+                    updateDocumentStatus(currentDocumentId, 'Error simulated');
+                    console.log('Branch error successfully simulated');
+                }
+            } catch (error) {
+                console.error('Failed to simulate error:', error);
+            }
+        });
+
+        document.getElementById('fix-branch-btn').addEventListener('click', async () => {
+            if (!currentDocumentId) {
+                console.error('No document ID available. Create a document first.');
+                return;
+            }
+
+            console.log(`Fixing branch for document ${currentDocumentId}...`);
+            try {
+                if (typeof DocumentBranchTester === 'undefined') {
+                    throw new Error('DocumentBranchTester not available');
+                }
+
+                const result = await DocumentBranchTester.testDocumentBranchFix(currentDocumentId);
+                if (result) {
+                    updateDocumentStatus(currentDocumentId, 'Fix attempted');
+                    console.log('Branch fix successfully initiated');
+                }
+            } catch (error) {
+                console.error('Failed to fix branch:', error);
+            }
+        });
+
+        document.getElementById('run-all-tests-btn').addEventListener('click', async () => {
+            console.log('Running complete test workflow...');
+
+            try {
+                if (typeof DocumentBranchTester === 'undefined') {
+                    throw new Error('DocumentBranchTester not available');
+                }
+
+                const result = await DocumentBranchTester.testCompleteBranchWorkflow();
+                console.log('Complete test workflow finished with result:', result);
+            } catch (error) {
+                console.error('Test workflow failed:', error);
+            }
+        });
+
+        document.getElementById('clear-output-btn').addEventListener('click', () => {
+            document.getElementById('output').innerHTML = '';
+        });
+
+        // Login and logout button handlers
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const username = document.getElementById('username-input').value.trim();
+            if (!username) {
+                console.error('Please enter a username');
+                return;
+            }
+
+            try {
+                await login(username);
+            } catch (error) {
+                console.error('Login failed:', error);
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            logout();
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('Document Branch Tester initialized');
+            updateConnectionStatus('offline');
+
+            // Initialize connection
+            try {
+                // Check if we have the helper function available
+                if (typeof initializeConnection === 'function') {
+                    await initializeConnection();
+                    updateConnectionStatus('online');
+                } else {
+                    // Fallback to connectToWebSocket
+                    await connectToWebSocket();
+                }
+
+                // Try auto login from stored credentials
+                autoLogin();
+            } catch (error) {
+                console.error('Failed to initialize connection:', error);
+                updateConnectionStatus('offline');
+            }
+        });
+    </script>
+</body>
+
+</html>

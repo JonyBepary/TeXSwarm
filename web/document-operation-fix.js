@@ -42,6 +42,247 @@
         }
     };
 
+    // Track pending document creations
+    let pendingBranchCreations = {};
+    let documentBranchStatus = {};
+    let maxRetries = 3;
+
+    // Function to check if a message is an error about missing document branches
+    function isDocumentBranchError(message) {
+        return message &&
+            message.type === 'Error' &&
+            message.payload &&
+            message.payload.message &&
+            message.payload.message.includes('Document branch not found');
+    }
+
+    // Function to extract document ID from an error message
+    function extractDocumentIdFromError(message) {
+        if (!message.payload || !message.payload.message) return null;
+
+        const errorMsg = message.payload.message;
+        const match = errorMsg.match(/Document branch not found: ([0-9a-f-]{36})/);
+        return match ? match[1] : null;
+    }
+
+    // Function to fix a document branch issue
+    function fixDocumentBranch(ws, documentId) {
+        if (!documentId) return false;
+
+        console.log(`Attempting to fix document branch for ${documentId}`);
+
+        // Check if we're already trying to fix this document
+        if (pendingBranchCreations[documentId]) {
+            console.log(`Already attempting to fix document branch for ${documentId}`);
+
+            // Check if we've exceeded max retries
+            if (pendingBranchCreations[documentId].attempts >= maxRetries) {
+                console.warn(`Max retries (${maxRetries}) reached for document ${documentId}`);
+                updateDocumentBranchStatus(documentId, 'failed');
+                return false;
+            }
+
+            // Increment the retry count
+            pendingBranchCreations[documentId].attempts++;
+            console.log(`Retry attempt ${pendingBranchCreations[documentId].attempts}/${maxRetries} for document ${documentId}`);
+            return true;
+        }
+
+        // Mark this document as being fixed
+        pendingBranchCreations[documentId] = {
+            timestamp: Date.now(),
+            attempts: 1
+        };
+
+        updateDocumentBranchStatus(documentId, 'fixing');
+
+        // Try multiple approaches to fix the document branch
+
+        // 1. First try to open the document (will cause it to be created)
+        const openMsg = {
+            type: 'OpenDocument',
+            payload: {
+                document_id: documentId
+            }
+        };
+
+        // 2. If the document doesn't exist, create it explicitly
+        const createMsg = {
+            type: 'CreateDocumentBranch',
+            payload: {
+                document_id: documentId
+            }
+        };
+
+        // If socket is open, send the messages
+        if (ws.readyState === WebSocket.OPEN) {
+            console.log(`Sending OpenDocument to fix branch: ${documentId}`);
+
+            try {
+                // First try to open it
+                ws.send(JSON.stringify(openMsg));
+
+                // Then after a short delay, try creating it explicitly
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN && pendingBranchCreations[documentId]) {
+                        console.log(`Sending CreateDocumentBranch as backup: ${documentId}`);
+                        ws.send(JSON.stringify(createMsg));
+                    }
+                }, 500);
+
+                return true;
+            } catch (e) {
+                console.error('Failed to send fix branch messages:', e);
+                updateDocumentBranchStatus(documentId, 'failed');
+                return false;
+            }
+        } else {
+            console.warn('WebSocket not open, cannot fix document branch');
+            updateDocumentBranchStatus(documentId, 'failed');
+            return false;
+        }
+    }
+
+    // Function to explicitly create a document branch
+    function createDocumentBranch(documentId) {
+        if (!documentId) return false;
+
+        // Check if WebSocket is available and connected
+        if (!window.websocket || window.websocket.readyState !== WebSocket.OPEN) {
+            console.error('Cannot create document branch: WebSocket not connected');
+            updateDocumentBranchStatus(documentId, 'failed');
+            return false;
+        }
+
+        console.log(`Explicitly creating document branch for ${documentId}`);
+        updateDocumentBranchStatus(documentId, 'fixing');
+
+        // Create and send the message
+        const createMsg = {
+            type: 'CreateDocumentBranch',
+            payload: {
+                document_id: documentId
+            }
+        };
+
+        try {
+            window.websocket.send(JSON.stringify(createMsg));
+
+            // Mark as pending
+            pendingBranchCreations[documentId] = {
+                timestamp: Date.now(),
+                attempts: 1
+            };
+
+            return true;
+        } catch (e) {
+            console.error('Failed to send CreateDocumentBranch message:', e);
+            updateDocumentBranchStatus(documentId, 'failed');
+            return false;
+        }
+    }
+
+    // Function to recover document operations after a branch is fixed
+    function retryPendingOperations(documentId) {
+        if (!documentId) return;
+
+        // Check if we have the document tracker available (from elsewhere in the script)
+        if (documentTracker && documentTracker.lastDocOpMessage) {
+            // Only retry if this is for the same document
+            if (documentTracker.lastDocOpMessage.payload &&
+                documentTracker.lastDocOpMessage.payload.operation &&
+                documentTracker.lastDocOpMessage.payload.operation.document_id === documentId) {
+
+                console.log(`Retrying last document operation for ${documentId}`);
+
+                // Check if WebSocket is connected
+                if (window.websocket && window.websocket.readyState === WebSocket.OPEN) {
+                    try {
+                        // Set retry flag to avoid loops
+                        documentTracker.isRetrying = true;
+
+                        // Send the message
+                        window.websocket.send(JSON.stringify(documentTracker.lastDocOpMessage));
+
+                        console.log('Resent last document operation');
+                    } catch (e) {
+                        console.error('Failed to resend document operation:', e);
+                    } finally {
+                        // Clear retry flag
+                        documentTracker.isRetrying = false;
+                    }
+                }
+            }
+        }
+    }
+
+    // Update the status of a document branch
+    function updateDocumentBranchStatus(documentId, status) {
+        if (!documentId) return;
+
+        documentBranchStatus[documentId] = {
+            status: status, // 'unknown', 'fixing', 'fixed', 'failed'
+            timestamp: Date.now()
+        };
+
+        // Update UI if possible
+        updateDocumentBranchStatusUI(documentId, status);
+    }
+
+    // Update UI to show document branch status
+    function updateDocumentBranchStatusUI(documentId, status) {
+        // Find status element in the DOM
+        const statusElement = document.getElementById('document-branch-status');
+        if (!statusElement) return;
+
+        // Update status display
+        let statusText = '';
+        let statusClass = '';
+
+        switch (status) {
+            case 'fixing':
+                statusText = `Fixing document branch (${documentId.substring(0, 8)}...)`;
+                statusClass = 'text-warning';
+                break;
+            case 'fixed':
+                statusText = `Document branch fixed (${documentId.substring(0, 8)}...)`;
+                statusClass = 'text-success';
+                // Clear after a few seconds
+                setTimeout(() => {
+                    if (statusElement && documentBranchStatus[documentId] &&
+                        documentBranchStatus[documentId].status === 'fixed') {
+                        statusElement.textContent = '';
+                        statusElement.className = '';
+                    }
+                }, 5000);
+                break;
+            case 'failed':
+                statusText = `Failed to fix document branch (${documentId.substring(0, 8)}...)`;
+                statusClass = 'text-danger';
+                break;
+            default:
+                statusText = '';
+                statusClass = '';
+        }
+
+        statusElement.textContent = statusText;
+        statusElement.className = statusClass;
+
+        // If this is the current document, also update the document info area
+        if (window.currentDocument && window.currentDocument.id === documentId) {
+            const docInfoElement = document.getElementById('document-info');
+            if (docInfoElement) {
+                if (status === 'fixing') {
+                    docInfoElement.dataset.branchStatus = 'fixing';
+                } else if (status === 'fixed') {
+                    docInfoElement.dataset.branchStatus = 'ok';
+                } else if (status === 'failed') {
+                    docInfoElement.dataset.branchStatus = 'error';
+                }
+            }
+        }
+    }
+
     // Add message handler to monitor for error responses
     const setupMessageHandler = function (ws) {
         // Store the original onmessage handler if it exists
@@ -49,67 +290,55 @@
 
         // Set new onmessage handler
         ws.onmessage = function (event) {
-            try {
-                const response = JSON.parse(event.data);
+            // Check if this is an error message
+            if (typeof event.data === 'string') {
+                try {
+                    const message = JSON.parse(event.data);
 
-                // Check for document-related responses
-                if (response.type === 'DocumentList' && response.payload && response.payload.documents) {
-                    // Track document IDs from the list
-                    response.payload.documents.forEach(doc => {
-                        if (doc && doc.id) {
-                            documentTracker.trackDocument(doc.id);
-                        }
-                    });
-                }
-                // Check for document update responses
-                else if (response.type === 'DocumentUpdate' && response.payload && response.payload.document_id) {
-                    documentTracker.trackDocument(response.payload.document_id);
-                }
-                // Check for error responses
-                else if (response.type === 'Error' && response.payload) {
-                    const errorMessage = response.payload.message || '';
+                    // Check if this is a document branch error
+                    if (isDocumentBranchError(message)) {
+                        const documentId = extractDocumentIdFromError(message);
+                        if (documentId) {
+                            console.log(`Detected document branch error for ${documentId}`);
 
-                    // Check for document branch not found error
-                    if (errorMessage.includes('Document branch not found') && documentTracker.lastDocOpMessage) {
-                        const docId = documentTracker.lastDocOpMessage.payload?.operation?.document_id;
+                            // Update status UI
+                            updateDocumentBranchStatus(documentId, 'fixing');
 
-                        if (docId && !documentTracker.isRetrying) {
-                            console.log('Document operation fix: Document not found, creating document:', docId);
-
-                            // Set retrying flag
-                            documentTracker.isRetrying = true;
-
-                            // Try to create the document
-                            setTimeout(() => {
-                                try {
-                                    // Create a document creation message
-                                    const createDocMsg = {
-                                        type: 'CreateDocument',
-                                        payload: {
-                                            title: `Auto-created document ${docId.slice(0, 8)}`,
-                                            repository_url: null
-                                        }
-                                    };
-
-                                    // Send the document creation message
-                                    ws.send(JSON.stringify(createDocMsg));
-
-                                    // Then retry the operation after a delay
-                                    setTimeout(() => {
-                                        console.log('Document operation fix: Retrying original operation');
-                                        ws.send(JSON.stringify(documentTracker.lastDocOpMessage));
-                                        documentTracker.isRetrying = false;
-                                    }, 1000);
-                                } catch (e) {
-                                    console.error('Document operation fix: Error creating document', e);
-                                    documentTracker.isRetrying = false;
-                                }
-                            }, 500);
+                            // Try to fix the document branch
+                            if (fixDocumentBranch(ws, documentId)) {
+                                // Don't forward the error to the application
+                                console.log(`Handling document branch error for ${documentId}`);
+                                return;
+                            }
                         }
                     }
+
+                    // Check for successful operations that indicate a branch is fixed
+                    if (message.type === 'DocumentUpdate' && message.payload && message.payload.document_id) {
+                        const documentId = message.payload.document_id;
+
+                        // Check if this document was pending a branch fix
+                        if (pendingBranchCreations[documentId]) {
+                            console.log(`Document branch appears to be fixed for ${documentId}`);
+                            updateDocumentBranchStatus(documentId, 'fixed');
+
+                            // Clean up the pending state
+                            delete pendingBranchCreations[documentId];
+                        }
+                    }
+
+                    // Check for explicit branch creation success
+                    if (message.type === 'BranchCreated' && message.payload && message.payload.document_id) {
+                        const documentId = message.payload.document_id;
+                        console.log(`Document branch explicitly created for ${documentId}`);
+                        updateDocumentBranchStatus(documentId, 'fixed');
+
+                        // Clean up the pending state
+                        delete pendingBranchCreations[documentId];
+                    }
+                } catch (e) {
+                    // Not JSON or other error, just pass it through
                 }
-            } catch (e) {
-                console.warn('Document operation fix: Error processing response', e);
             }
 
             // Call the original handler if it exists
@@ -225,4 +454,11 @@
             window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
         }
     }, 500);
+
+    // Make functions available to the window/global scope
+    window.createDocumentBranch = createDocumentBranch;
+    window.fixDocumentBranch = function (documentId) {
+        return fixDocumentBranch(window.websocket, documentId);
+    };
+    window.retryPendingOperations = retryPendingOperations;
 })();

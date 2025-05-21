@@ -12,6 +12,9 @@
     --status-online: #28a745;
     --status-offline: #dc3545;
     --status-connecting: #ffc107;
+    --status-fixing: #ffc107;
+    --status-fixed: #28a745;
+    --status-failed: #dc3545;
 }
 
 * {
@@ -71,6 +74,17 @@ body {
     margin-right: 6px;
     background-color: var(--status-connecting);
     transition: background-color 0.3s;
+}
+
+.server-status {
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    opacity: 0.7;
+    padding: 2px 5px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
 }
 
 .status-indicator.online {
@@ -300,6 +314,79 @@ body {
     opacity: 0.7;
 }
 
+/* Document branch status styling */
+#document-branch-status {
+    padding: 4px 8px;
+    border-radius: var(--border-radius);
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+}
+
+#document-branch-status.text-warning {
+    background-color: rgba(255, 193, 7, 0.2);
+    border-left: 3px solid var(--status-fixing);
+}
+
+#document-branch-status.text-success {
+    background-color: rgba(40, 167, 69, 0.2);
+    border-left: 3px solid var(--status-fixed);
+}
+
+#document-branch-status.text-danger {
+    background-color: rgba(220, 53, 69, 0.2);
+    border-left: 3px solid var(--status-failed);
+}
+
+/* Document info with branch status */
+#document-info {
+    position: relative;
+}
+
+#document-info[data-branch-status="error"]::before,
+#document-info[data-branch-status="fixing"]::before,
+#document-info[data-branch-status="ok"]::before {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 5px;
+    position: absolute;
+    left: -15px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+#document-info[data-branch-status="error"]::before {
+    background-color: var(--status-failed);
+    box-shadow: 0 0 5px var(--status-failed);
+}
+
+#document-info[data-branch-status="fixing"]::before {
+    background-color: var(--status-fixing);
+    box-shadow: 0 0 5px var(--status-fixing);
+    animation: pulse 1.5s infinite;
+}
+
+#document-info[data-branch-status="ok"]::before {
+    background-color: var(--status-fixed);
+    box-shadow: 0 0 5px var(--status-fixed);
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.5;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.5;
+    }
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .sidebar {
@@ -326,4 +413,25 @@ body {
         border-left: none;
         border-top: 1px solid rgba(0, 0, 0, 0.1);
     }
+}
+
+/* Footer styles */
+.footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    background-color: var(--bg-light);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 5px 15px;
+    z-index: 1000;
+    font-size: 0.8rem;
+}
+
+#connection-info {
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+#connection-info:hover {
+    opacity: 1;
 }

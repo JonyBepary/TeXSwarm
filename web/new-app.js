@@ -5,11 +5,55 @@
 
 // Configuration
 const API_HOST = window.location.hostname || 'localhost';
-const API_PORT = 8080;
+let API_PORT = 8090; // Default, will be overridden if config.json is available
 const WS_HOST = window.location.hostname || 'localhost';
-const WS_PORT = 8081;
-const API_URL = `http://${API_HOST}:${API_PORT}`;
-const WS_URL = `ws://${WS_HOST}:${WS_PORT}/ws`;
+let WS_PORT = 8091; // Default, will be overridden if config.json is available
+let API_URL = `http://${API_HOST}:${API_PORT}`;
+let WS_URL = `ws://${WS_HOST}:${WS_PORT}/ws`;
+
+// Function to load configuration from config.json
+async function loadConfig() {
+    try {
+        console.log(`Attempting to load config from ../config.json`);
+        const response = await fetch('../config.json');
+        if (response.ok) {
+            const config = await response.json();
+            if (config && config.server) {
+                API_PORT = config.server.api_port || API_PORT;
+                WS_PORT = config.server.ws_port || WS_PORT;
+
+                // Update URLs with new port values
+                API_URL = `http://${API_HOST}:${API_PORT}`;
+                WS_URL = `ws://${WS_HOST}:${WS_PORT}/ws`;
+
+                console.log(`Configuration loaded: API Port=${API_PORT}, WS Port=${WS_PORT}`);
+                console.log(`Updated API_URL=${API_URL}, WS_URL=${WS_URL}`);
+            }
+        } else {
+            console.warn(`Failed to load config.json (status: ${response.status}), using default ports`);
+        }
+    } catch (error) {
+        console.error('Error loading config:', error);
+    }
+
+    // Update any elements that display port information
+    updatePortDisplay();
+}
+
+// Function to update any elements that display port information
+function updatePortDisplay() {
+    // If we have elements showing connection info, update them here
+    const connectionInfoEl = document.getElementById('connection-info');
+    if (connectionInfoEl) {
+        connectionInfoEl.textContent = `Connected to: API on port ${API_PORT}, WebSocket on port ${WS_PORT}`;
+    }
+
+    // Update the global URL variables to match the current ports
+    API_URL = `http://${API_HOST}:${API_PORT}`;
+    WS_URL = `ws://${WS_HOST}:${WS_PORT}/ws`;
+
+    console.log(`Updated URLs: API_URL=${API_URL}, WS_URL=${WS_URL}`);
+}
 
 // State management
 let currentUser = null;
@@ -26,7 +70,10 @@ let lastHeartbeat = null;
 /**
  * Initialize the application when the DOM is loaded
  */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load configuration from config.json
+    await loadConfig();
+
     // Initialize Ace editor
     initializeEditor();
 
@@ -102,6 +149,13 @@ function setupEventListeners() {
     // Logout button
     document.getElementById('logout-btn').addEventListener('click', logout);
 
+    // Refresh connection button
+    document.getElementById('refresh-connection').addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('Manually refreshing connection');
+        checkApiConnection();
+    });
+
     // New document button
     document.getElementById('new-doc-btn').addEventListener('click', () => {
         if (!currentUser) {
@@ -164,6 +218,79 @@ function setupEventListeners() {
         modal.show();
     });
 
+    // Debug reconnect button
+    document.getElementById('debug-reconnect').addEventListener('click', () => {
+        console.log("Debug: Manual reconnection requested");
+        showToast("Reconnecting to server...");
+
+        // Close the existing connection if open
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+            websocket.close();
+        }
+
+        // Force reload configuration and reconnect
+        loadConfig().then(() => {
+            checkApiConnection();
+        });
+    });
+
+    // Debug create document button
+    document.getElementById('debug-create-doc').addEventListener('click', () => {
+        console.log("Debug: Creating test document");
+        showToast("Creating a test document...");
+
+        const testDocTitle = `Test Doc ${new Date().toISOString().slice(0, 16)}`;
+        createDocument(testDocTitle, "basic");
+    });
+
+    // Debug fix document branches button
+    document.getElementById('debug-fix-branches').addEventListener('click', () => {
+        console.log("Debug: Attempting to fix document branches");
+        showToast("Attempting to fix document branches...");
+
+        if (currentDocument && currentDocument.id) {
+            // Try to create the document branch if it doesn't exist
+            fixDocumentBranch(currentDocument.id);
+        } else {
+            showToast("No document selected. Please open a document first.", "warning");
+        }
+    });
+
+    // Debug create branch button
+    document.getElementById('debug-create-branch').addEventListener('click', () => {
+        console.log("Debug: Creating document branch explicitly");
+        showToast("Creating document branch explicitly...");
+
+        if (currentDocument && currentDocument.id) {
+            // Try to create the document branch explicitly
+            if (typeof createDocumentBranch === 'function') {
+                createDocumentBranch(currentDocument.id);
+            } else {
+                // Fallback if the function isn't available
+                const message = {
+                    type: 'CreateDocumentBranch',
+                    payload: {
+                        document_id: currentDocument.id
+                    }
+                };
+
+                if (websocket && websocket.readyState === WebSocket.OPEN) {
+                    try {
+                        websocket.send(JSON.stringify(message));
+                        console.log("Sent CreateDocumentBranch message");
+                    } catch (e) {
+                        console.error("Failed to send message:", e);
+                        showToast("Failed to create branch", "error");
+                    }
+                } else {
+                    showToast("WebSocket not connected", "error");
+                }
+            }
+        } else {
+            showToast("No document selected. Please open a document first.", "warning");
+        }
+    });
+
     // Copy URL button
     document.getElementById('copy-url-btn').addEventListener('click', () => {
         const shareUrl = document.getElementById('share-url');
@@ -205,9 +332,19 @@ function handleUrlParameters() {
  */
 async function checkApiConnection() {
     try {
+        // Make sure we're using the most up-to-date URLs
+        API_URL = `http://${API_HOST}:${API_PORT}`;
+        WS_URL = `ws://${WS_HOST}:${WS_PORT}/ws`;
+
+        console.log(`Checking API connection to ${API_URL}/api/ping`);
+        console.log(`Current WebSocket URL: ${WS_URL}`);
+
         const response = await fetch(`${API_URL}/api/ping`);
 
         if (response.ok) {
+            const data = await response.json();
+            console.log(`API connection successful:`, data);
+
             document.getElementById('api-status').textContent = 'Connected';
             document.getElementById('api-status').classList.add('text-success');
 
@@ -222,6 +359,7 @@ async function checkApiConnection() {
                 autoLogin(savedUserId, savedUsername);
             }
         } else {
+            console.error(`API responded with status: ${response.status}`);
             document.getElementById('api-status').textContent = 'Error';
             document.getElementById('api-status').classList.add('text-danger');
             updateConnectionStatus('offline');
@@ -251,7 +389,11 @@ function connectWebSocket() {
     document.getElementById('ws-status').textContent = 'Connecting...';
 
     try {
-        websocket = new WebSocket(WS_URL);
+        // Make sure we're using the current URL with the latest port from config
+        const currentWsUrl = `ws://${WS_HOST}:${WS_PORT}/ws`;
+        console.log(`Connecting to WebSocket at ${currentWsUrl}`);
+
+        websocket = new WebSocket(currentWsUrl);
 
         // Setup WebSocket event handlers
         websocket.onopen = handleWebSocketOpen;
@@ -308,36 +450,115 @@ function handleWebSocketOpen() {
 }
 
 /**
- * Handle WebSocket message event
+ * Handle WebSocket message
  */
 function handleWebSocketMessage(event) {
     try {
         const message = JSON.parse(event.data);
-        console.log('Received message:', message);
 
-        // Process different message types
         switch (message.type) {
-            case 'Heartbeat':
-                handleHeartbeat(message.payload);
-                break;
-            case 'DocumentUpdate':
-                handleDocumentUpdate(message.payload);
+            case 'Ping':
+                handlePing();
                 break;
             case 'DocumentList':
                 handleDocumentList(message.payload);
                 break;
-            case 'PresenceUpdate':
-                handlePresenceUpdate(message.payload);
+            case 'DocumentContent':
+                handleDocumentContent(message.payload);
+                break;
+            case 'DocumentUpdate':
+                handleDocumentUpdate(message.payload);
+                break;
+            case 'CollaboratorList':
+                handleCollaboratorList(message.payload);
+                break;
+            case 'UserAuthenticated':
+                handleUserAuthenticated(message.payload);
+                break;
+            case 'CompileResult':
+                handleCompileResult(message.payload);
+                break;
+            case 'BranchCreated':
+                handleBranchCreated(message.payload);
                 break;
             case 'Error':
-                handleError(message.payload);
+                handleErrorMessage(message.payload);
                 break;
             default:
-                console.log('Unknown message type:', message.type);
+                console.log('Unhandled message type:', message.type);
         }
     } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
+        console.error('Error handling WebSocket message:', error, event.data);
     }
+}
+
+/**
+ * Handle branch created message
+ */
+function handleBranchCreated(payload) {
+    if (!payload || !payload.document_id) {
+        console.warn('Invalid BranchCreated payload:', payload);
+        return;
+    }
+
+    console.log(`Document branch created for ${payload.document_id}`);
+
+    // If we have the status update function available
+    if (typeof updateDocumentBranchStatus === 'function') {
+        updateDocumentBranchStatus(payload.document_id, 'fixed');
+    }
+
+    // If this is for the current document or a pending document, try to open it
+    if (currentDocument && currentDocument.id === payload.document_id) {
+        console.log('Branch created for current document, refreshing content');
+        requestDocumentContent(payload.document_id);
+    } else {
+        // Check if there's a pending document to open
+        const pendingDocId = localStorage.getItem('pendingDocumentId');
+        if (pendingDocId === payload.document_id) {
+            console.log('Branch created for pending document, opening it now');
+            openDocument(pendingDocId);
+            localStorage.removeItem('pendingDocumentId');
+        }
+    }
+
+    showToast('Document branch created successfully', 'success');
+}
+
+/**
+ * Handle error message
+ */
+function handleErrorMessage(payload) {
+    if (!payload || !payload.message) {
+        console.warn('Invalid Error payload:', payload);
+        return;
+    }
+
+    const errorMessage = payload.message;
+    console.error('Server error:', errorMessage);
+
+    // Check for specific error types
+    if (errorMessage.includes('Document branch not found')) {
+        // Extract document ID if possible
+        const match = errorMessage.match(/Document branch not found: ([0-9a-f-]{36})/);
+        const documentId = match ? match[1] : null;
+
+        if (documentId) {
+            console.log(`Document branch error for ${documentId}`);
+
+            // If we have the document branch fix function available
+            if (typeof fixDocumentBranch === 'function') {
+                console.log('Attempting automatic fix via fixDocumentBranch');
+                fixDocumentBranch(documentId);
+
+                // Don't show the error toast since we're handling it
+                return;
+            }
+        }
+    }
+
+    // For any other errors, show a toast
+    showToast(`Error: ${errorMessage}`, 'error');
 }
 
 /**
@@ -409,6 +630,46 @@ function clearHeartbeatCheck() {
 function handleHeartbeat(payload) {
     lastHeartbeat = new Date().getTime();
     updateConnectionStatus('online');
+}
+
+/**
+ * Fix a document branch by calling the Document Persistence API
+ * This will create the branch if it doesn't exist
+ */
+async function fixDocumentBranch(documentId) {
+    try {
+        console.log(`Fixing document branch for ${documentId}`);
+
+        // Use the Document Persistence API endpoint to check/create the document
+        const response = await fetch(`${API_URL}/api/documents/${documentId}/check`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Document branch fix result:', result);
+            showToast(result.message);
+
+            // If the document was created or exists, try to open it again
+            if (result.success) {
+                // Wait a moment to ensure the server has time to process
+                setTimeout(() => {
+                    openDocument(documentId);
+                }, 1000);
+            }
+        } else {
+            const errorText = await response.text();
+            console.error('Error fixing document branch:', errorText);
+            showToast(`Error fixing document branch: ${response.status}`, 'error');
+        }
+    } catch (error) {
+        console.error('Exception fixing document branch:', error);
+        showToast(`Exception fixing document branch: ${error.message}`, 'error');
+    }
 }
 
 /**
@@ -628,6 +889,9 @@ function logout() {
     documents = [];
     updateDocumentList();
 
+    // Check connection status and reconnect if needed
+    checkApiConnection();
+
     showToast('You have been logged out');
 }
 
@@ -740,6 +1004,9 @@ async function createDocument(title, templateType) {
     }
 
     try {
+        console.log(`Creating document "${title}" with template "${templateType}"`);
+        showToast(`Creating document "${title}"...`);
+
         // Generate content based on template
         const content = getLatexTemplate(templateType, title, currentUser.name);
 
@@ -757,16 +1024,24 @@ async function createDocument(title, templateType) {
         });
 
         if (!response.ok) {
-            throw new Error('Failed to create document');
+            const errorText = await response.text();
+            console.error(`Failed to create document: ${response.status} - ${errorText}`);
+            throw new Error(`Failed to create document: ${response.status}`);
         }
 
         const data = await response.json();
+        console.log('Document created successfully:', data);
 
         // Request updated document list
         requestDocumentList();
 
+        // Fix the document branch before opening it
+        await fixDocumentBranch(data.document_id);
+
         // Open the new document
-        openDocument(data.document_id);
+        setTimeout(() => {
+            openDocument(data.document_id);
+        }, 1000);
 
         showToast(`Document "${title}" created`);
     } catch (error) {
@@ -776,56 +1051,80 @@ async function createDocument(title, templateType) {
 }
 
 /**
- * Open a document
+ * Open a document by ID
  */
-async function openDocument(documentId) {
+function openDocument(documentId) {
+    if (!isWebSocketConnected()) {
+        showToast('WebSocket not connected', 'error');
+        return;
+    }
+
     if (!currentUser) {
         showToast('Please login first', 'error');
         return;
     }
 
+    console.log(`Attempting to open document: ${documentId}`);
+
+    // Update document branch status if we have the function available
+    if (typeof updateDocumentBranchStatus === 'function') {
+        updateDocumentBranchStatus(documentId, 'unknown');
+    }
+
+    // Clear editor
+    if (editor) {
+        editor.setValue('');
+    }
+
+    // Show loading state
+    document.getElementById('editor-container').classList.add('loading');
+
+    // Send open document message
+    const message = {
+        type: 'OpenDocument',
+        payload: {
+            document_id: documentId
+        }
+    };
+
     try {
-        // Send request to get document
-        const response = await fetch(`${API_URL}/api/documents/${documentId}`, {
-            headers: {
-                'x-user-id': currentUser.id
-            }
-        });
+        websocket.send(JSON.stringify(message));
 
-        if (!response.ok) {
-            throw new Error('Failed to open document');
-        }
+        // Track opening time for timeout handling
+        const openStartTime = Date.now();
+        const openTimeout = 5000; // 5 seconds
 
-        const doc = await response.json();
+        // Set up a timeout to check if opening succeeded
+        const openDocTimeout = setTimeout(() => {
+            console.log(`Document open timeout reached for ${documentId}`);
 
-        // Set as current document
-        currentDocument = {
-            id: doc.id,
-            title: doc.title,
-            owner: doc.owner,
-            version: doc.version
-        };
+            // Check if document was successfully opened
+            const isOpen = currentDocument && currentDocument.id === documentId;
+            if (!isOpen) {
+                console.log(`Document didn't open within timeout period`);
 
-        // Update UI
-        document.getElementById('document-title').textContent = doc.title;
-        editor.session.setValue(doc.content || '');
-        updateDocumentList(); // To highlight active document
+                // Try to fix document branch if the function is available
+                if (typeof fixDocumentBranch === 'function') {
+                    console.log(`Attempting to fix document branch for ${documentId}`);
+                    fixDocumentBranch(documentId);
 
-        // Send WebSocket message to open document
-        if (isWebSocketConnected()) {
-            const message = {
-                type: 'OpenDocument',
-                payload: {
-                    document_id: documentId
+                    // Clear loading state
+                    document.getElementById('editor-container').classList.remove('loading');
+
+                    // Show message to user
+                    showToast('Attempting to fix document branch...', 'info');
                 }
-            };
+            }
+        }, openTimeout);
 
-            websocket.send(JSON.stringify(message));
-        }
+        // Store timeout so it can be cleared if open succeeds
+        window._openDocTimeoutId = openDocTimeout;
 
-        showToast(`Document "${doc.title}" opened`);
+        console.log('Sent OpenDocument message');
+
     } catch (error) {
-        console.error('Document opening error:', error);
+        console.error('Failed to send OpenDocument message:', error);
+        document.getElementById('editor-container').classList.remove('loading');
         showToast('Failed to open document', 'error');
     }
 }

@@ -3,7 +3,9 @@
         "api_host": "0.0.0.0",
         "api_port": 8090,
         "ws_host": "0.0.0.0",
-        "ws_port": 8091
+        "ws_port": 8091,
+        "document_host": "0.0.0.0",
+        "document_port": 8092
     },
     "network": {
         "peer_id_seed": null,

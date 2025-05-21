@@ -111,8 +111,8 @@
 
     <div class="card">
         <h2>Configuration</h2>
-        <p>HTTP API: <code id="http-url">http://localhost:8080</code></p>
-        <p>WebSocket: <code id="ws-url">ws://localhost:8081/ws</code></p>
+        <p>HTTP API: <code id="http-url">http://localhost:8090</code></p>
+        <p>WebSocket: <code id="ws-url">ws://localhost:8091/ws</code></p>
         <button id="update-config">Update Configuration</button>
     </div>
 
@@ -121,9 +121,30 @@
     <script>
         // Configuration
         const API_HOST = window.location.hostname || 'localhost';
-        const API_PORT = 8080;
+        let API_PORT = 8090; // Default, will be overridden by config.json if available
         const WS_HOST = window.location.hostname || 'localhost';
-        const WS_PORT = 8081;
+        let WS_PORT = 8091; // Default, will be overridden by config.json if available
+
+        // Function to load configuration from config.json
+        async function loadConfig() {
+            try {
+                const response = await fetch('../config.json');
+                if (response.ok) {
+                    const config = await response.json();
+                    if (config && config.server) {
+                        API_PORT = config.server.api_port || API_PORT;
+                        WS_PORT = config.server.ws_port || WS_PORT;
+                        updateDisplayedUrls();
+                        addLog(`Configuration loaded: API Port=${API_PORT}, WS Port=${WS_PORT}`, 'success');
+                    }
+                } else {
+                    addLog('Failed to load config.json, using default ports', 'warning');
+                }
+            } catch (error) {
+                addLog(`Error loading config: ${error.message}`, 'error');
+                console.error('Error loading config:', error);
+            }
+        }
 
         // Elements
         const httpStatus = document.getElementById('http-status');
@@ -133,8 +154,14 @@
         const log = document.getElementById('log');
 
         // Update displayed URLs
-        httpUrlElement.textContent = `http://${API_HOST}:${API_PORT}`;
-        wsUrlElement.textContent = `ws://${WS_HOST}:${WS_PORT}/ws`;
+        function updateDisplayedUrls() {
+            httpUrlElement.textContent = `http://${API_HOST}:${API_PORT}`;
+            wsUrlElement.textContent = `ws://${WS_HOST}:${WS_PORT}/ws`;
+        }
+        updateDisplayedUrls();
+
+        // Load configuration
+        loadConfig();
 
         // Log function
         function addLog(message, type = 'info') {
@@ -252,9 +279,9 @@
         // Update configuration
         document.getElementById('update-config').addEventListener('click', () => {
             const newHttpHost = prompt('Enter HTTP host (default: localhost):', API_HOST);
-            const newHttpPort = prompt('Enter HTTP port (default: 8080):', API_PORT);
+            const newHttpPort = prompt('Enter HTTP port (default: 8090):', API_PORT);
             const newWsHost = prompt('Enter WebSocket host (default: localhost):', WS_HOST);
-            const newWsPort = prompt('Enter WebSocket port (default: 8081):', WS_PORT);
+            const newWsPort = prompt('Enter WebSocket port (default: 8091):', WS_PORT);
 
             if (newHttpHost && newHttpPort && newWsHost && newWsPort) {
                 location.href = `?http_host=${newHttpHost}&http_port=${newHttpPort}&ws_host=${newWsHost}&ws_port=${newWsPort}`;

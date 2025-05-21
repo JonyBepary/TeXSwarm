@@ -6,6 +6,14 @@ This document describes the API protocol for the P2P LaTeX Collaboration Tool.
 
 The API protocol defines the messages that can be exchanged between clients and the server over WebSockets, as well as the REST API endpoints for HTTP communication.
 
+## Server Endpoints
+
+TeXSwarm provides three separate service endpoints:
+
+1. **HTTP API Server**: Port 8090 - Handles REST API requests for document management
+2. **WebSocket Server**: Port 8091 - Manages real-time collaborative editing sessions
+3. **Document Persistence API**: Port 8092 - Handles document storage and persistence operations
+
 ## WebSocket Protocol
 
 ### Message Format

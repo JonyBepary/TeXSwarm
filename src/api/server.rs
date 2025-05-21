@@ -67,23 +67,29 @@ impl ApiServer {
         info!("WebSocket server started successfully on {}:{}", self.config.server.ws_host, self.config.server.ws_port);
 
         // Start document persistence API if available
-        if let Some(persistence_api) = &self.document_persistence_api {
+        if let Some(ref persistence_api) = self.document_persistence_api {
             info!("Starting Document Persistence API...");
 
-            // Get the routes from the document persistence API
-            let persistence_routes = persistence_api.routes();
+            // Clone the persistence service from the API to avoid borrowing issues
+            let persistence_service = persistence_api.clone_persistence_service();
 
-            // Combine with the existing routes (this is done separately since we can't modify HTTP API)
-            let addr = format!("{}:{}", self.config.server.api_host, self.config.server.api_port)
+            // Use a different port for the document persistence API
+            // Calculate a port that's offset from the main API port
+            let api_host = self.config.server.api_host.clone();
+            let api_port = self.config.server.api_port + 2;  // Use port 8092 instead of 8090
+            let addr = format!("{}:{}", api_host, api_port)
                 .parse::<std::net::SocketAddr>()
-                .map_err(|e| anyhow::anyhow!("Failed to parse API address: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Failed to parse Document API address: {}", e))?;
 
+            info!("Document Persistence API binding to {}", addr);
+
+            // Create routes using the static method and spawn the server task
             tokio::spawn(async move {
-                info!("Document Persistence API routes mounted");
-                warp::serve(persistence_routes).run(addr).await;
+                let routes = DocumentPersistenceApi::routes(persistence_service);
+                warp::serve(routes).run(addr).await;
             });
 
-            info!("Document Persistence API started successfully");
+            info!("Document Persistence API started successfully on {}", addr);
         }
 
         // Start the heartbeat task

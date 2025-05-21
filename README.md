@@ -184,7 +184,7 @@ cd TeXSwarm
 cargo build --release
 
 # Run the server
-cargo run --release --bin server
+cargo run --release --bin p2p-latex-collab-server
 ```
 
 #### Using Cargo
@@ -196,6 +196,33 @@ cargo install texswarm
 # Run the server
 texswarm-server
 ```
+
+### Server Configuration
+
+#### Port Configuration
+
+TeXSwarm runs three server components, each on its own port:
+
+1. **HTTP API Server**: Port 8090 - REST API for document management
+2. **WebSocket Server**: Port 8091 - Real-time collaborative editing
+3. **Document Persistence API**: Port 8092 - Document storage and persistence
+
+You can modify these ports in the `config.json` file:
+
+```json
+{
+  "server": {
+    "api_host": "0.0.0.0",
+    "api_port": 8090,
+    "ws_host": "0.0.0.0",
+    "ws_port": 8091
+  }
+}
+```
+
+> **Note**: The Document Persistence API automatically uses port 8092 to avoid conflicts with the other services.
+
+For detailed server configuration instructions, see the [Server Setup Guide](docs/server_setup_guide.md).
 
 #### Web Frontend
 

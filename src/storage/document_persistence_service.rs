@@ -8,7 +8,6 @@ use uuid::Uuid;
 use crate::crdt::engine::CrdtEngine;
 use crate::crdt::document_branch_manager::DocumentBranchManager;
 use crate::git::manager::GitManager;
-use crate::utils::errors::AppError;
 
 /// Service responsible for persisting documents to both local storage and remote Git repositories
 pub struct DocumentPersistenceService {

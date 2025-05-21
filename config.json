@@ -1,9 +1,9 @@
 {
     "server": {
         "api_host": "0.0.0.0",
-        "api_port": 8080,
+        "api_port": 8090,
         "ws_host": "0.0.0.0",
-        "ws_port": 8081
+        "ws_port": 8091
     },
     "network": {
         "peer_id_seed": null,

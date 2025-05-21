@@ -92,6 +92,7 @@ impl WebSocketServer {
         Self {
             crdt_engine: Arc::clone(&self.crdt_engine),
             sessions: Arc::clone(&self.sessions),
+            document_branch_manager: Arc::clone(&self.document_branch_manager),
         }
     }
 
@@ -227,11 +228,14 @@ impl WebSocketServer {
 
     /// Apply a document operation to the CRDT engine
     pub async fn apply_operation(&self, operation: DocumentOperation) -> Result<()> {
-        // Extract the document ID and user ID
-        let (document_id, user_id) = match &operation {
-            DocumentOperation::Insert { document_id, user_id, .. } => (document_id, user_id),
-            DocumentOperation::Delete { document_id, user_id, .. } => (document_id, user_id),
-            DocumentOperation::Replace { document_id, user_id, .. } => (document_id, user_id),
+        // Clone the operation upfront to avoid borrow issues
+        let operation_clone = operation.clone();
+
+        // Extract the document ID
+        let document_id = match &operation {
+            DocumentOperation::Insert { document_id, .. } => *document_id,
+            DocumentOperation::Delete { document_id, .. } => *document_id,
+            DocumentOperation::Replace { document_id, .. } => *document_id,
         };
 
         // Create a title for potential document creation
@@ -239,7 +243,7 @@ impl WebSocketServer {
 
         // Try to apply the operation
         let engine = self.crdt_engine.read().await;
-        match engine.apply_local_operation(document_id, operation.clone()).await {
+        match engine.apply_local_operation(&document_id, operation_clone.clone()).await {
             Ok(_) => Ok(()),
             Err(e) => {
                 // Check if this is a "Document branch not found" error
@@ -249,13 +253,13 @@ impl WebSocketServer {
                     drop(engine);
 
                     // Create the missing document branch
-                    if let Ok(created) = self.document_branch_manager.ensure_document_exists(document_id, &title).await {
+                    if let Ok(created) = self.document_branch_manager.ensure_document_exists(&document_id, &title).await {
                         if created {
                             tracing::info!("Created missing document branch for {}", document_id);
 
                             // Try the operation again with the newly created document
                             let engine = self.crdt_engine.read().await;
-                            engine.apply_local_operation(document_id, operation).await?;
+                            engine.apply_local_operation(&document_id, operation_clone).await?;
                             return Ok(());
                         }
                     }

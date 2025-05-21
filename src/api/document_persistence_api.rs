@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::storage::document_persistence_service::DocumentPersistenceService;
-use crate::utils::errors::AppError;
 
 /// Request to save a document
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,10 +31,13 @@ impl DocumentPersistenceApi {
         }
     }
 
-    /// Create enhanced document persistence routes
-    pub fn routes(&self) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
-        let persistence_service = self.persistence_service.clone();
+    /// Clone the persistence service to avoid borrowing issues
+    pub fn clone_persistence_service(&self) -> Arc<DocumentPersistenceService> {
+        Arc::clone(&self.persistence_service)
+    }
 
+    /// Create enhanced document persistence routes
+    pub fn routes(persistence_service: Arc<DocumentPersistenceService>) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
         // Route for saving a document
         let save_document = warp::path!("api" / "documents" / String / "save")
             .and(warp::post())
@@ -60,10 +62,21 @@ impl DocumentPersistenceApi {
     /// Save a document
     async fn handle_save_document(
         id: String,
-        req: SaveDocumentRequest,
+        req: SaveDocumentRequest,  // Removing underscore to allow for future use
         persistence_service: Arc<DocumentPersistenceService>,
     ) -> Result<impl Reply, Rejection> {
         tracing::info!("Saving document: {}", id);
+
+        // Log request content if available
+        if let Some(content) = &req.content {
+            tracing::debug!("Document content length: {} bytes", content.len());
+
+            // TODO: In a future implementation, we would save the content here
+            // For now, we'll just check if content exists but not actually use it
+            tracing::debug!("Content provided for document: {}", id);
+        } else {
+            tracing::debug!("No content provided for document: {}", id);
+        }
 
         let document_id = match Uuid::parse_str(&id) {
             Ok(id) => id,

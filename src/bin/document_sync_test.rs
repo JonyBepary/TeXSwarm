@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::Result;
 use p2p_latex_collab::{
     P2PLatexCollab,
     utils::config::{Config, GitConfig, NetworkConfig, ServerConfig, StorageConfig},

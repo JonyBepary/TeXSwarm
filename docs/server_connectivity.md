@@ -4,12 +4,13 @@ This document outlines the methods and tools for testing the connectivity of the
 
 ## Server Components
 
-The TeXSwarm server has two main components:
+The TeXSwarm server has three main components:
 
-1. **HTTP API Server** - Running on port 8080 (default)
-2. **WebSocket Server** - Running on port 8081 (default)
+1. **HTTP API Server** - Running on port 8090 (default)
+2. **WebSocket Server** - Running on port 8091 (default)
+3. **Document Persistence API** - Running on port 8092 (default)
 
-Both servers now bind to all network interfaces (`0.0.0.0`) allowing them to accept connections from any source, not just localhost.
+All servers bind to all network interfaces (`0.0.0.0`) allowing them to accept connections from any source, not just localhost.
 
 ## Testing Tools
 
@@ -23,9 +24,9 @@ Both servers now bind to all network interfaces (`0.0.0.0`) allowing them to acc
 
 2. **Comprehensive Connectivity Test**:
    ```bash
-   ./test_server_connectivity.sh [host] [http_port] [ws_port]
+   ./test_server_connectivity.sh [host] [http_port] [ws_port] [persistence_port]
    ```
-   Tests both the HTTP API and WebSocket server to verify connectivity.
+   Tests all server components (HTTP API, WebSocket server, and Document Persistence API) to verify connectivity.
 
 ### Web-based Tests
 

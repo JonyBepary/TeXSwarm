@@ -24,12 +24,6 @@ impl P2PLatexCollab {
         let crdt_engine = Arc::new(RwLock::new(crdt::engine::CrdtEngine::new()?));
         let network_engine = Arc::new(RwLock::new(network::engine::NetworkEngine::new(&config.network, Arc::clone(&crdt_engine)).await?));
         let git_manager = Arc::new(RwLock::new(git::manager::GitManager::new(config, Arc::clone(&crdt_engine))?));
-        let api_server = Arc::new(api::server::ApiServer::new(
-            config,
-            Arc::clone(&crdt_engine),
-            Arc::clone(&network_engine),
-            Arc::clone(&git_manager),
-        )?);
 
         // Initialize the document persistence service with auto-save every 5 minutes
         let document_persistence = Arc::new(storage::document_persistence_service::DocumentPersistenceService::new(
@@ -38,10 +32,17 @@ impl P2PLatexCollab {
             300, // 5 minutes in seconds
         ));
 
+        // Create API server with persistence service
+        let mut api_server = api::server::ApiServer::new(
+            config,
+            Arc::clone(&crdt_engine),
+            Arc::clone(&network_engine),
+            Arc::clone(&git_manager),
+        )?;
+
         // Add the persistence service to the API server
-        if let Ok(mut server) = Arc::get_mut(&api_server) {
-            server.set_persistence_service(Arc::clone(&document_persistence));
-        }
+        api_server.set_persistence_service(Arc::clone(&document_persistence));
+        let api_server = Arc::new(api_server);
 
         Ok(Self {
             crdt_engine,

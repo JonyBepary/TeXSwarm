@@ -316,6 +316,7 @@ fn create_test_config(instance_id: u16) -> Config {
 }
 
 /// Workaround helper function to get peers with better error handling
+#[allow(dead_code)]
 async fn get_peers(network: &Arc<RwLock<NetworkEngine>>) -> Result<usize> {
     // This is a safer implementation that works around potential issues
     // with the NetworkEngine implementation
